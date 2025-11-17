@@ -3,7 +3,7 @@ services:
     name: ibtikar-backend
     env: python
     buildCommand: pip install -r Desktop/ibtikar-backend-main/requirements-prod.txt
-    startCommand: sh -c "cd Desktop/ibtikar-backend-main && PYTHONPATH=. uvicorn backend.api.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: sh -c "cd Desktop/ibtikar-backend-main && export PYTHONPATH=. && uvicorn backend.api.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: ENV
         value: production
