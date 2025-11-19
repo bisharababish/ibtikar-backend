@@ -24,12 +24,20 @@ def _stub(texts: List[str]) -> List[Dict]:
 
 def _is_huggingface_api(url: str) -> bool:
     """Check if URL is a Hugging Face Inference API endpoint."""
-    return "api-inference.huggingface.co" in url or "hf.space" in url
+    return "api-inference.huggingface.co" in url or "router.huggingface.co" in url or "hf.space" in url
 
 
 async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     """Call Hugging Face Inference API for each text."""
     results = []
+    
+    # Convert old API URL to new format if needed
+    if "api-inference.huggingface.co" in url:
+        # Extract model path: models/username/model-name
+        model_path = url.split("models/")[-1] if "models/" in url else url.split("/")[-1]
+        # Use new router endpoint
+        url = f"https://router.huggingface.co/hf-inference/v1/models/{model_path}"
+    
     async with httpx.AsyncClient(timeout=30.0) as client:
         for text in texts:
             try:
