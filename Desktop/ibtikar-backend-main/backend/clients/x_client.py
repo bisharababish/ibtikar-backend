@@ -28,11 +28,20 @@ def build_auth_url(state: str, code_challenge: str) -> str:
     return f"{AUTH_URL}?{qp}"
 
 async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, Any]:
+    redirect_uri = str(settings.X_REDIRECT_URI)
+    client_id = settings.X_CLIENT_ID
+    
+    # Log for debugging (don't log sensitive data in production)
+    print(f"🔄 Token exchange request:")
+    print(f"   Client ID: {client_id[:10]}...")
+    print(f"   Redirect URI: {redirect_uri}")
+    print(f"   Code: {code[:20]}...")
+    
     data = {
         "grant_type": "authorization_code",
-        "client_id": settings.X_CLIENT_ID,
+        "client_id": client_id,
         "code": code,
-        "redirect_uri": str(settings.X_REDIRECT_URI),
+        "redirect_uri": redirect_uri,
         "code_verifier": code_verifier,
     }
     async with httpx.AsyncClient(timeout=20.0) as client:
@@ -43,6 +52,9 @@ async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, An
         )
         if not r.is_success:
             error_text = r.text
-            print(f"❌ Token exchange failed with status {r.status_code}: {error_text}")
+            print(f"❌ Token exchange failed with status {r.status_code}")
+            print(f"   Response: {error_text}")
+            print(f"   Request redirect_uri: {redirect_uri}")
+            print(f"   Request client_id: {client_id[:10]}...")
             raise Exception(f"Token exchange failed: {r.status_code} - {error_text}")
         return r.json()
