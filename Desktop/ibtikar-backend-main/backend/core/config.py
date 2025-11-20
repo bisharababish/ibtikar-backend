@@ -7,6 +7,7 @@ class Settings(BaseSettings):
 
     # --- X OAuth ---
     X_CLIENT_ID: str
+    X_CLIENT_SECRET: str
     X_REDIRECT_URI: AnyUrl
     X_SCOPES: str = "tweet.read users.read offline.access"
 

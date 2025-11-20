@@ -37,6 +37,12 @@ async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, An
     # Normalize redirect URI to match exactly what was used in auth URL
     redirect_uri = _normalize_redirect_uri(settings.X_REDIRECT_URI)
     client_id = settings.X_CLIENT_ID
+    client_secret = settings.X_CLIENT_SECRET
+    
+    # Twitter OAuth 2.0 requires Basic Authentication for token exchange
+    # Format: base64(client_id:client_secret)
+    credentials = f"{client_id}:{client_secret}"
+    auth_header = base64.b64encode(credentials.encode()).decode()
     
     # Log for debugging (don't log sensitive data in production)
     print(f"🔄 Token exchange request:")
@@ -44,10 +50,10 @@ async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, An
     print(f"   Redirect URI: {redirect_uri}")
     print(f"   Code: {code[:20]}...")
     print(f"   Code verifier length: {len(code_verifier)}")
+    print(f"   Using Basic Auth: Yes")
     
     data = {
         "grant_type": "authorization_code",
-        "client_id": client_id,
         "code": code,
         "redirect_uri": redirect_uri,
         "code_verifier": code_verifier,
@@ -57,7 +63,10 @@ async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, An
             r = await client.post(
                 TOKEN_URL,
                 data=data,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Authorization": f"Basic {auth_header}",
+                },
             )
             if not r.is_success:
                 error_text = r.text
