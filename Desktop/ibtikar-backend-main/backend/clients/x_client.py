@@ -53,16 +53,37 @@ async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, An
         "code_verifier": code_verifier,
     }
     async with httpx.AsyncClient(timeout=20.0) as client:
-        r = await client.post(
-            TOKEN_URL,
-            data=data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-        if not r.is_success:
-            error_text = r.text
-            print(f"❌ Token exchange failed with status {r.status_code}")
-            print(f"   Response: {error_text}")
-            print(f"   Request redirect_uri: {redirect_uri}")
-            print(f"   Request client_id: {client_id[:10]}...")
-            raise Exception(f"Token exchange failed: {r.status_code} - {error_text}")
-        return r.json()
+        try:
+            r = await client.post(
+                TOKEN_URL,
+                data=data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            if not r.is_success:
+                error_text = r.text
+                error_json = None
+                try:
+                    error_json = r.json()
+                except:
+                    pass
+                
+                print(f"❌ Token exchange failed with status {r.status_code}")
+                print(f"   Response text: {error_text}")
+                if error_json:
+                    print(f"   Response JSON: {error_json}")
+                print(f"   Request redirect_uri: {redirect_uri}")
+                print(f"   Request client_id: {client_id[:10]}...")
+                print(f"   Request grant_type: authorization_code")
+                print(f"   Code length: {len(code)}")
+                print(f"   Code verifier length: {len(code_verifier)}")
+                
+                # Extract specific error if available
+                error_msg = error_text
+                if error_json and "error" in error_json:
+                    error_msg = f"{error_json.get('error')}: {error_json.get('error_description', '')}"
+                
+                raise Exception(f"Token exchange failed: {r.status_code} - {error_msg}")
+            return r.json()
+        except httpx.HTTPError as e:
+            print(f"❌ HTTP error during token exchange: {str(e)}")
+            raise Exception(f"Token exchange HTTP error: {str(e)}")
