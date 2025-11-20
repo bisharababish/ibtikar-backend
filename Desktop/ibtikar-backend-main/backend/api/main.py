@@ -329,6 +329,16 @@ async def x_oauth_callback(
     return RedirectResponse(url=app_redirect_url)
 
 
+@app.get("/v1/oauth/debug")
+def oauth_debug():
+    """Debug endpoint to check OAuth configuration."""
+    return {
+        "client_id": settings.X_CLIENT_ID[:10] + "..." if settings.X_CLIENT_ID else "NOT SET",
+        "redirect_uri": str(settings.X_REDIRECT_URI),
+        "scopes": settings.X_SCOPES,
+        "env": settings.ENV,
+    }
+
 @app.get("/v1/me/link-status")
 def link_status(user_id: int = 1, db: Session = Depends(get_db)):
     xt = db.query(models.XToken).filter(models.XToken.user_id == user_id).first()
