@@ -273,6 +273,13 @@ async def x_oauth_callback(
     code_verifier = state_data["verifier"]
     user_id = int(state_data["user_id"])
 
+    # Log callback details for debugging
+    print(f"📥 OAuth callback received:")
+    print(f"   Code: {code[:20] if code else None}...")
+    print(f"   State: {state}")
+    print(f"   User ID: {user_id}")
+    print(f"   Expected redirect URI: {settings.X_REDIRECT_URI}")
+
     try:
         print(f"🔄 Exchanging OAuth code for token...")
         token = await exchange_code_for_token(code, code_verifier)
