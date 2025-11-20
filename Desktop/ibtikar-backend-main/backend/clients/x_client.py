@@ -14,11 +14,17 @@ def generate_pkce() -> tuple[str, str]:
     challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
     return verifier, challenge
 
+def _normalize_redirect_uri(uri: str) -> str:
+    """Normalize redirect URI - remove trailing slash, ensure consistent format."""
+    uri = str(uri).rstrip("/")
+    return uri
+
 def build_auth_url(state: str, code_challenge: str) -> str:
+    redirect_uri = _normalize_redirect_uri(settings.X_REDIRECT_URI)
     params = {
         "response_type": "code",
         "client_id": settings.X_CLIENT_ID,
-        "redirect_uri": str(settings.X_REDIRECT_URI),
+        "redirect_uri": redirect_uri,
         "scope": settings.X_SCOPES,
         "state": state,
         "code_challenge": code_challenge,
@@ -28,7 +34,8 @@ def build_auth_url(state: str, code_challenge: str) -> str:
     return f"{AUTH_URL}?{qp}"
 
 async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, Any]:
-    redirect_uri = str(settings.X_REDIRECT_URI)
+    # Normalize redirect URI to match exactly what was used in auth URL
+    redirect_uri = _normalize_redirect_uri(settings.X_REDIRECT_URI)
     client_id = settings.X_CLIENT_ID
     
     # Log for debugging (don't log sensitive data in production)
@@ -36,6 +43,7 @@ async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, An
     print(f"   Client ID: {client_id[:10]}...")
     print(f"   Redirect URI: {redirect_uri}")
     print(f"   Code: {code[:20]}...")
+    print(f"   Code verifier length: {len(code_verifier)}")
     
     data = {
         "grant_type": "authorization_code",
