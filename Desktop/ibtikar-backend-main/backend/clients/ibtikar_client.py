@@ -115,100 +115,60 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                 r.raise_for_status()
                 data = r.json()
                 
-                # Debug: log first response to understand format
-                if i == 0:
-                    print(f"📋 HF API response format (first text): {data}")
-                    print(f"📋 Response type: {type(data)}")
-                    if isinstance(data, list):
-                        print(f"📋 List length: {len(data)}")
-                        for idx, item in enumerate(data):
-                            print(f"   Item {idx}: {item}")
-                
                 # Handle different response formats from HF API
-                if isinstance(data, list) and len(data) > 0:
-                    # Standard HF API response: [{"label": "LABEL_0", "score": 0.95}, {"label": "LABEL_1", "score": 0.05}, ...]
-                    # Find both labels to determine which is toxic
-                    # Try different label formats: "LABEL_0", "0", "non-toxic", "toxic", etc.
-                    label_0_item = None
-                    label_1_item = None
-                    
-                    for item in data:
-                        label_str = str(item.get("label", "")).upper()
-                        if "LABEL_0" in label_str or label_str == "0" or "NON-TOXIC" in label_str or "SAFE" in label_str:
-                            label_0_item = item
-                        elif "LABEL_1" in label_str or label_str == "1" or "TOXIC" in label_str or "HARMFUL" in label_str:
-                            label_1_item = item
-                    
-                    # If still not found, try by index (sometimes it's just ordered)
-                    if not label_0_item and not label_1_item and len(data) >= 2:
-                        # Assume first is LABEL_0, second is LABEL_1
-                        label_0_item = data[0]
-                        label_1_item = data[1]
-                    elif not label_0_item and len(data) > 0:
-                        # Only one item, check its label
-                        first_item = data[0]
-                        label_str = str(first_item.get("label", "")).upper()
-                        if "LABEL_1" in label_str or "TOXIC" in label_str or "1" in label_str:
-                            label_1_item = first_item
-                        else:
-                            label_0_item = first_item
-                    
-                    # Debug: log all labels for first text
-                    if i == 0:
-                        print(f"📋 All labels in response: {data}")
-                        if label_0_item:
-                            print(f"🔍 LABEL_0 found: {label_0_item}")
-                        if label_1_item:
-                            print(f"🔍 LABEL_1 found: {label_1_item}")
-                    
-                    # Determine which label has higher score (the prediction)
-                    score_0 = 0.0
-                    score_1 = 0.0
-                    
-                    if label_0_item and label_1_item:
-                        score_0 = float(label_0_item.get("score", 0.0))
-                        score_1 = float(label_1_item.get("score", 0.0))
+                # Most HF classification models return: [{"label": "LABEL_0", "score": 0.95}, {"label": "LABEL_1", "score": 0.05}]
+                label_mapped = "unknown"
+                score = 0.5
+                
+                try:
+                    if isinstance(data, list) and len(data) > 0:
+                        # Find LABEL_0 (safe) and LABEL_1 (toxic/harmful)
+                        label_0_item = None
+                        label_1_item = None
                         
-                        # For arbert-toxic-classifier: LABEL_1 = toxic/harmful, LABEL_0 = safe
-                        # The model returns probabilities for both classes
-                        # If LABEL_1 (toxic) has higher probability, it's harmful
-                        # We use a simple comparison - whichever has higher score wins
+                        for item in data:
+                            if not isinstance(item, dict):
+                                continue
+                            label_str = str(item.get("label", "")).upper()
+                            if "LABEL_0" in label_str or label_str == "0":
+                                label_0_item = item
+                            elif "LABEL_1" in label_str or label_str == "1":
+                                label_1_item = item
+                        
+                        # If not found by label name, assume by position (first = LABEL_0, second = LABEL_1)
+                        if not label_0_item and len(data) > 0 and isinstance(data[0], dict):
+                            label_0_item = data[0]
+                        if not label_1_item and len(data) > 1 and isinstance(data[1], dict):
+                            label_1_item = data[1]
+                        
+                        # Get scores
+                        score_0 = float(label_0_item.get("score", 0.0)) if label_0_item else 0.0
+                        score_1 = float(label_1_item.get("score", 0.0)) if label_1_item else 0.0
+                        
+                        # Simple rule: LABEL_1 (toxic) score >= LABEL_0 (safe) score = harmful
                         if score_1 >= score_0:
-                            # LABEL_1 (toxic) has equal or higher score = harmful
                             label_mapped = "harmful"
-                            score = score_1  # Use the toxic score as confidence (0.0 to 1.0)
+                            score = score_1
                         else:
-                            # LABEL_0 (safe) has higher score = safe
                             label_mapped = "safe"
-                            score = score_0  # Use the safe score as confidence (0.0 to 1.0)
-                    elif label_1_item:
-                        # Only LABEL_1 found - it's harmful
-                        score_1 = float(label_1_item.get("score", 0.0))
-                        label_mapped = "harmful"
-                        score = score_1
-                    elif label_0_item:
-                        # Only LABEL_0 found - it's safe
-                        score_0 = float(label_0_item.get("score", 0.0))
-                        label_mapped = "safe"
-                        score = score_0
-                    else:
-                        # Fallback: use the best scoring label
-                        best = max(data, key=lambda x: x.get("score", 0))
-                        label = best.get("label", "LABEL_0")
-                        score = best.get("score", 0.0)
-                        # Map based on label name
-                        label_str = str(label).upper()
-                        label_mapped = "harmful" if ("LABEL_1" in label_str or "TOXIC" in label_str or "1" == label_str) else "safe"
-                        if "LABEL_1" in label_str or "TOXIC" in label_str:
-                            score_1 = score
-                        else:
-                            score_0 = score
+                            score = score_0
+                        
+                        # Debug log for first text only
+                        if i == 0:
+                            print(f"📋 HF response: {data}")
+                            print(f"✅ Detected: {label_mapped} (score={score:.4f}, LABEL_0={score_0:.4f}, LABEL_1={score_1:.4f})")
                     
-                    if i == 0:
-                        print(f"✅ Final: {label_mapped} with score {score:.4f} (LABEL_0={score_0:.4f}, LABEL_1={score_1:.4f})")
+                    elif isinstance(data, dict):
+                        # Single dict response
+                        label = str(data.get("label", "")).upper()
+                        score = float(data.get("score", 0.5))
+                        label_mapped = "harmful" if ("LABEL_1" in label or "TOXIC" in label or "1" in label) else "safe"
                     
-                    # Use the score of the predicted class (0.0 to 1.0)
                     results.append({"label": label_mapped, "score": float(score)})
+                    
+                except Exception as e:
+                    print(f"⚠️ Error parsing HF response for text {i+1}: {e}, data: {data}")
+                    results.append({"label": "unknown", "score": 0.5})
                 elif isinstance(data, dict):
                     # Some models return dict format
                     label = data.get("label", "safe")
