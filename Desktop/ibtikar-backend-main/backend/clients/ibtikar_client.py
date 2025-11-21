@@ -118,23 +118,53 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                 # Debug: log first response to understand format
                 if i == 0:
                     print(f"📋 HF API response format (first text): {data}")
+                    print(f"📋 Response type: {type(data)}")
+                    if isinstance(data, list):
+                        print(f"📋 List length: {len(data)}")
+                        for idx, item in enumerate(data):
+                            print(f"   Item {idx}: {item}")
                 
                 # Handle different response formats from HF API
                 if isinstance(data, list) and len(data) > 0:
                     # Standard HF API response: [{"label": "LABEL_0", "score": 0.95}, {"label": "LABEL_1", "score": 0.05}, ...]
                     # Find both labels to determine which is toxic
-                    label_0_item = next((x for x in data if "LABEL_0" in str(x.get("label", ""))), None)
-                    label_1_item = next((x for x in data if "LABEL_1" in str(x.get("label", ""))), None)
+                    # Try different label formats: "LABEL_0", "0", "non-toxic", "toxic", etc.
+                    label_0_item = None
+                    label_1_item = None
+                    
+                    for item in data:
+                        label_str = str(item.get("label", "")).upper()
+                        if "LABEL_0" in label_str or label_str == "0" or "NON-TOXIC" in label_str or "SAFE" in label_str:
+                            label_0_item = item
+                        elif "LABEL_1" in label_str or label_str == "1" or "TOXIC" in label_str or "HARMFUL" in label_str:
+                            label_1_item = item
+                    
+                    # If still not found, try by index (sometimes it's just ordered)
+                    if not label_0_item and not label_1_item and len(data) >= 2:
+                        # Assume first is LABEL_0, second is LABEL_1
+                        label_0_item = data[0]
+                        label_1_item = data[1]
+                    elif not label_0_item and len(data) > 0:
+                        # Only one item, check its label
+                        first_item = data[0]
+                        label_str = str(first_item.get("label", "")).upper()
+                        if "LABEL_1" in label_str or "TOXIC" in label_str or "1" in label_str:
+                            label_1_item = first_item
+                        else:
+                            label_0_item = first_item
                     
                     # Debug: log all labels for first text
                     if i == 0:
                         print(f"📋 All labels in response: {data}")
                         if label_0_item:
-                            print(f"🔍 LABEL_0: score={label_0_item.get('score')}")
+                            print(f"🔍 LABEL_0 found: {label_0_item}")
                         if label_1_item:
-                            print(f"🔍 LABEL_1: score={label_1_item.get('score')}")
+                            print(f"🔍 LABEL_1 found: {label_1_item}")
                     
                     # Determine which label has higher score (the prediction)
+                    score_0 = 0.0
+                    score_1 = 0.0
+                    
                     if label_0_item and label_1_item:
                         score_0 = float(label_0_item.get("score", 0.0))
                         score_1 = float(label_1_item.get("score", 0.0))
@@ -151,13 +181,28 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                             # LABEL_0 (safe) has higher score = safe
                             label_mapped = "safe"
                             score = score_0  # Use the safe score as confidence (0.0 to 1.0)
+                    elif label_1_item:
+                        # Only LABEL_1 found - it's harmful
+                        score_1 = float(label_1_item.get("score", 0.0))
+                        label_mapped = "harmful"
+                        score = score_1
+                    elif label_0_item:
+                        # Only LABEL_0 found - it's safe
+                        score_0 = float(label_0_item.get("score", 0.0))
+                        label_mapped = "safe"
+                        score = score_0
                     else:
                         # Fallback: use the best scoring label
                         best = max(data, key=lambda x: x.get("score", 0))
                         label = best.get("label", "LABEL_0")
                         score = best.get("score", 0.0)
                         # Map based on label name
-                        label_mapped = "harmful" if "LABEL_1" in str(label) or "toxic" in str(label).lower() or "1" in str(label) else "safe"
+                        label_str = str(label).upper()
+                        label_mapped = "harmful" if ("LABEL_1" in label_str or "TOXIC" in label_str or "1" == label_str) else "safe"
+                        if "LABEL_1" in label_str or "TOXIC" in label_str:
+                            score_1 = score
+                        else:
+                            score_0 = score
                     
                     if i == 0:
                         print(f"✅ Final: {label_mapped} with score {score:.4f} (LABEL_0={score_0:.4f}, LABEL_1={score_1:.4f})")
