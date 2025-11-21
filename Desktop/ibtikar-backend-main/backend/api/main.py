@@ -421,106 +421,139 @@ async def analysis_preview(
     per_batch: int = Query(15),
     db: Session = Depends(get_db),
 ):
-    raw = await get_following_feed(
-        user_id, db, authors_limit=authors_limit, per_batch=per_batch
-    )
-    if isinstance(raw, dict) and raw.get("rate_limited"):
-        reset = raw.get("reset")
+    try:
+        raw = await get_following_feed(
+            user_id, db, authors_limit=authors_limit, per_batch=per_batch
+        )
+        if isinstance(raw, dict) and raw.get("rate_limited"):
+            reset = raw.get("reset")
+            try:
+                reset_human = (
+                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(reset)))
+                    if reset
+                    else None
+                )
+            except Exception:
+                reset_human = None
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "rate_limited",
+                    "resource": raw.get("resource"),
+                    "reset_epoch": reset,
+                    "reset_time": reset_human,
+                    "limit": raw.get("limit"),
+                    "remaining": raw.get("remaining"),
+                },
+            )
+
+        posts = x_tweets_to_posts(raw)
+        if not posts:
+            return AnalysisResponse(
+                items=[], harmful_count=0, safe_count=0, unknown_count=0
+            )
+
         try:
-            reset_human = (
-                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(reset)))
-                if reset
-                else None
+            preds = await analyze_texts([p.text for p in posts])
+        except Exception as e:
+            # Handle rate limit errors from model API
+            if "rate limit" in str(e).lower() or "429" in str(e) or "Rate limited" in str(e):
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "rate_limited",
+                        "resource": "model_api",
+                        "message": str(e),
+                    }
+                )
+            # Re-raise other errors
+            raise
+
+        items: list[AnalysisItem] = []
+        hc = sc = uc = 0
+
+        for p, pr in zip(posts, preds):
+            label = pr.get("label", "unknown")
+            score = float(pr.get("score", 0.0))
+
+            items.append(AnalysisItem(post=p, label=label, score=score))
+            if label == "harmful":
+                hc += 1
+            elif label == "safe":
+                sc += 1
+            else:
+                uc += 1
+
+            # Key we use to avoid duplicates
+            post_id_str = str(p.post_id) if getattr(p, "post_id", None) is not None else None
+
+            # Check if a prediction for this (user, source, post_id) already exists
+            existing_pred = (
+                db.query(Prediction)
+                .filter(
+                    Prediction.user_id == user_id,
+                    Prediction.source == "x",
+                    Prediction.post_id == post_id_str,
+                )
+                .first()
             )
-        except Exception:
-            reset_human = None
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "error": "rate_limited",
-                "resource": raw.get("resource"),
-                "reset_epoch": reset,
-                "reset_time": reset_human,
-                "limit": raw.get("limit"),
-                "remaining": raw.get("remaining"),
-            },
-        )
 
-    posts = x_tweets_to_posts(raw)
-    if not posts:
-        return AnalysisResponse(
-            items=[], harmful_count=0, safe_count=0, unknown_count=0
-        )
-
-    preds = await analyze_texts([p.text for p in posts])
-
-    items: list[AnalysisItem] = []
-    hc = sc = uc = 0
-
-    for p, pr in zip(posts, preds):
-        label = pr.get("label", "unknown")
-        score = float(pr.get("score", 0.0))
-
-        items.append(AnalysisItem(post=p, label=label, score=score))
-        if label == "harmful":
-            hc += 1
-        elif label == "safe":
-            sc += 1
-        else:
-            uc += 1
-
-        # Key we use to avoid duplicates
-        post_id_str = str(p.post_id) if getattr(p, "post_id", None) is not None else None
-
-        # Check if a prediction for this (user, source, post_id) already exists
-        existing_pred = (
-            db.query(Prediction)
-            .filter(
-                Prediction.user_id == user_id,
-                Prediction.source == "x",
-                Prediction.post_id == post_id_str,
-            )
-            .first()
-        )
-
-        if existing_pred:
-            # Update existing prediction instead of inserting a duplicate
-            existing_pred.author_id = (
-                str(p.author_id) if getattr(p, "author_id", None) else None
-            )
-            existing_pred.lang = getattr(p, "lang", None)
-            existing_pred.text = p.text
-            existing_pred.label = label
-            existing_pred.score = score
-            existing_pred.post_created_at = (
-                p.created_at if isinstance(p.created_at, datetime) else None
-            )
-            existing_pred.created_at = datetime.utcnow()
-        else:
-            # Create a new prediction
-            db_obj = Prediction(
-                user_id=user_id,
-                source="x",
-                post_id=post_id_str,
-                author_id=(
+            if existing_pred:
+                # Update existing prediction instead of inserting a duplicate
+                existing_pred.author_id = (
                     str(p.author_id) if getattr(p, "author_id", None) else None
-                ),
-                lang=getattr(p, "lang", None),
-                text=p.text,
-                label=label,
-                score=score,
-                post_created_at=(
+                )
+                existing_pred.lang = getattr(p, "lang", None)
+                existing_pred.text = p.text
+                existing_pred.label = label
+                existing_pred.score = score
+                existing_pred.post_created_at = (
                     p.created_at if isinstance(p.created_at, datetime) else None
-                ),
-            )
-            db.add(db_obj)
+                )
+                existing_pred.created_at = datetime.utcnow()
+            else:
+                # Create a new prediction
+                db_obj = Prediction(
+                    user_id=user_id,
+                    source="x",
+                    post_id=post_id_str,
+                    author_id=(
+                        str(p.author_id) if getattr(p, "author_id", None) else None
+                    ),
+                    lang=getattr(p, "lang", None),
+                    text=p.text,
+                    label=label,
+                    score=score,
+                    post_created_at=(
+                        p.created_at if isinstance(p.created_at, datetime) else None
+                    ),
+                )
+                db.add(db_obj)
 
-    # Save all changes (new + updated) at once
-    db.commit()
+        # Save all changes (new + updated) at once
+        db.commit()
+        print(f"💾 Saved {len(items)} predictions to database (harmful: {hc}, safe: {sc}, unknown: {uc})")
 
-    return AnalysisResponse(
-        items=items,
-        harmful_count=hc,
-        safe_count=sc,
-        unknown_count=uc,
-    )
+        return AnalysisResponse(
+            items=items,
+            harmful_count=hc,
+            safe_count=sc,
+            unknown_count=uc,
+        )
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 429 rate limit)
+        raise
+    except Exception as e:
+        # Log the error for debugging
+        import traceback
+        print(f"❌ Error in analysis_preview: {e}")
+        print(traceback.format_exc())
+        # Return a user-friendly error
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_server_error",
+                "message": str(e),
+                "hint": "This might be due to Twitter API issues, database connection, or model API problems. Please try again later."
+            }
+        )

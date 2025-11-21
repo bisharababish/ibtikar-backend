@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # --- IbtikarAI ---
     IBTIKAR_URL: str | None = None
+    HF_TOKEN: str | None = None  # Optional Hugging Face API token
 
 
 @lru_cache(maxsize=1)

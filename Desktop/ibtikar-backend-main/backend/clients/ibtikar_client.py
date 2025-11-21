@@ -1,4 +1,6 @@
 from typing import List, Dict
+import asyncio
+import time
 
 import httpx
 from backend.core.config import settings
@@ -38,39 +40,169 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
         # Use new router endpoint
         url = f"https://router.huggingface.co/hf-inference/v1/models/{model_path}"
     
+    print(f"🔍 Calling Hugging Face API: {url}")
+    
+    # Prepare headers with optional authentication
+    headers = {"Content-Type": "application/json"}
+    if settings.HF_TOKEN:
+        headers["Authorization"] = f"Bearer {settings.HF_TOKEN}"
+        print("🔑 Using HF_TOKEN for authentication")
+    
     async with httpx.AsyncClient(timeout=30.0) as client:
-        for text in texts:
+        for i, text in enumerate(texts):
             try:
                 # Hugging Face Inference API expects single input
                 r = await client.post(
                     url,
                     json={"inputs": text},
-                    headers={"Content-Type": "application/json"}
+                    headers=headers
                 )
+                
+                # Handle rate limiting properly
+                if r.status_code == 429:
+                    # Get rate limit info from headers
+                    reset_timestamp = r.headers.get("x-rate-limit-reset")
+                    retry_after = r.headers.get("retry-after")
+                    limit = r.headers.get("x-rate-limit-limit", "unknown")
+                    remaining = r.headers.get("x-rate-limit-remaining", "0")
+                    
+                    # Calculate wait time
+                    wait_seconds = 60  # Default 1 minute
+                    if retry_after:
+                        try:
+                            wait_seconds = int(retry_after)
+                        except ValueError:
+                            pass
+                    elif reset_timestamp:
+                        try:
+                            reset_time = int(reset_timestamp)
+                            current_time = int(time.time())
+                            wait_seconds = max(1, reset_time - current_time)
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Cap wait time at 5 minutes (300 seconds)
+                    wait_seconds = min(wait_seconds, 300)
+                    
+                    wait_minutes = wait_seconds // 60
+                    wait_secs = wait_seconds % 60
+                    
+                    error_msg = (
+                        f"⚠️ Rate limited (429) for text {i+1}/{len(texts)}. "
+                        f"Limit: {limit}, Remaining: {remaining}. "
+                        f"Waiting {wait_minutes}m {wait_secs}s before retry..."
+                    )
+                    print(error_msg)
+                    
+                    # Wait for the calculated time
+                    await asyncio.sleep(wait_seconds)
+                    
+                    # Try once more after waiting
+                    r = await client.post(
+                        url,
+                        json={"inputs": text},
+                        headers=headers
+                    )
+                    
+                    # If still rate limited, raise an error with details
+                    if r.status_code == 429:
+                        raise Exception(
+                            f"Still rate limited after waiting. "
+                            f"Reset time: {reset_timestamp or 'unknown'}, "
+                            f"Please try again later."
+                        )
+                
                 r.raise_for_status()
                 data = r.json()
                 
+                # Debug: log first response to understand format
+                if i == 0:
+                    print(f"📋 HF API response format (first text): {data}")
+                
                 # Handle different response formats from HF API
                 if isinstance(data, list) and len(data) > 0:
-                    # Standard HF API response: [{"label": "LABEL_0", "score": 0.95}, ...]
-                    best = max(data, key=lambda x: x.get("score", 0))
-                    label = best.get("label", "LABEL_0")
-                    score = best.get("score", 0.0)
-                    # Map HF labels to our format
-                    label_mapped = "harmful" if "LABEL_1" in label or "toxic" in label.lower() else "safe"
+                    # Standard HF API response: [{"label": "LABEL_0", "score": 0.95}, {"label": "LABEL_1", "score": 0.05}, ...]
+                    # Find both labels to determine which is toxic
+                    label_0_item = next((x for x in data if "LABEL_0" in str(x.get("label", ""))), None)
+                    label_1_item = next((x for x in data if "LABEL_1" in str(x.get("label", ""))), None)
+                    
+                    # Debug: log all labels for first text
+                    if i == 0:
+                        print(f"📋 All labels in response: {data}")
+                        if label_0_item:
+                            print(f"🔍 LABEL_0: score={label_0_item.get('score')}")
+                        if label_1_item:
+                            print(f"🔍 LABEL_1: score={label_1_item.get('score')}")
+                    
+                    # Determine which label has higher score (the prediction)
+                    if label_0_item and label_1_item:
+                        score_0 = float(label_0_item.get("score", 0.0))
+                        score_1 = float(label_1_item.get("score", 0.0))
+                        
+                        # For arbert-toxic-classifier: LABEL_1 = toxic/harmful, LABEL_0 = safe
+                        # Use the higher score to determine the prediction
+                        # Also check if LABEL_1 score is above threshold (0.5) to be more confident
+                        if score_1 > score_0 and score_1 > 0.5:
+                            # LABEL_1 (toxic) has higher score and is above threshold = harmful
+                            label_mapped = "harmful"
+                            score = score_1  # Use the toxic score as confidence
+                        elif score_1 > 0.7:
+                            # LABEL_1 score is very high (>70%) = definitely harmful
+                            label_mapped = "harmful"
+                            score = score_1
+                        else:
+                            # LABEL_0 (safe) has higher score or LABEL_1 is low = safe
+                            label_mapped = "safe"
+                            score = score_0  # Use the safe score as confidence
+                    else:
+                        # Fallback: use the best scoring label
+                        best = max(data, key=lambda x: x.get("score", 0))
+                        label = best.get("label", "LABEL_0")
+                        score = best.get("score", 0.0)
+                        # Map based on label name
+                        label_mapped = "harmful" if "LABEL_1" in str(label) or "toxic" in str(label).lower() or "1" in str(label) else "safe"
+                    
+                    if i == 0:
+                        print(f"✅ Final: {label_mapped} with score {score:.4f}")
+                    
+                    # Use the score of the predicted class (0.0 to 1.0)
                     results.append({"label": label_mapped, "score": float(score)})
                 elif isinstance(data, dict):
                     # Some models return dict format
                     label = data.get("label", "safe")
                     score = data.get("score", 0.0)
-                    label_mapped = "harmful" if "toxic" in label.lower() or "harmful" in label.lower() else "safe"
+                    label_mapped = "harmful" if "toxic" in str(label).lower() or "harmful" in str(label).lower() or "1" in str(label) else "safe"
                     results.append({"label": label_mapped, "score": float(score)})
                 else:
                     # Fallback
+                    print(f"⚠️ Unexpected response format for text {i+1}: {type(data)}")
                     results.append({"label": "safe", "score": 0.5})
-            except Exception as e:
-                print(f"⚠️ HF API error for text: {e}")
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    # Rate limited - raise exception to be handled by caller
+                    reset_timestamp = e.response.headers.get("x-rate-limit-reset")
+                    retry_after = e.response.headers.get("retry-after")
+                    raise Exception(
+                        f"Rate limited by Hugging Face API. "
+                        f"Reset: {reset_timestamp or 'unknown'}, "
+                        f"Retry after: {retry_after or 'unknown'} seconds"
+                    )
+                print(f"⚠️ HF API HTTP error for text {i+1}: {e.response.status_code} - {e.response.text}")
                 results.append({"label": "safe", "score": 0.5})
+            except Exception as e:
+                # Re-raise rate limit errors
+                if "rate limit" in str(e).lower() or "429" in str(e):
+                    raise
+                print(f"⚠️ HF API error for text {i+1}: {type(e).__name__}: {e}")
+                results.append({"label": "safe", "score": 0.5})
+    
+    print(f"✅ Processed {len(results)}/{len(texts)} texts via HF API")
+    
+    # Log summary of classifications
+    harmful_count = sum(1 for r in results if r.get("label") == "harmful")
+    safe_count = sum(1 for r in results if r.get("label") == "safe")
+    print(f"📊 Classification summary: {harmful_count} harmful, {safe_count} safe")
+    
     return results
 
 
@@ -86,6 +218,10 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
         try:
             return await _call_huggingface_api(texts, url)
         except Exception as e:
+            # Re-raise rate limit errors so they can be handled properly
+            if "rate limit" in str(e).lower() or "429" in str(e) or "Rate limited" in str(e):
+                print(f"❌ Hugging Face API rate limited: {e}")
+                raise
             print(f"⚠️ Hugging Face API error: {e}, using stub")
             return _stub(texts)
 

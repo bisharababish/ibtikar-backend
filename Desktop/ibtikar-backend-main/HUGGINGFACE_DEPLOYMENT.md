@@ -81,3 +81,4 @@ IBTIKAR_URL=https://<your-username>-arabert-toxic-classifier.hf.space
 ✅ **Scalable** - Hugging Face handles model inference
 ✅ **Lightweight backend** - No PyTorch/Transformers in Render service
 
+
