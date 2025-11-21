@@ -163,22 +163,15 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         label = str(data.get("label", "")).upper()
                         score = float(data.get("score", 0.5))
                         label_mapped = "harmful" if ("LABEL_1" in label or "TOXIC" in label or "1" in label) else "safe"
-                    
-                    results.append({"label": label_mapped, "score": float(score)})
+                        results.append({"label": label_mapped, "score": float(score)})
+                    else:
+                        # Unexpected format - fallback
+                        print(f"⚠️ Unexpected response format for text {i+1}: {type(data)} - {data}")
+                        results.append({"label": "unknown", "score": 0.5})
                     
                 except Exception as e:
                     print(f"⚠️ Error parsing HF response for text {i+1}: {e}, data: {data}")
                     results.append({"label": "unknown", "score": 0.5})
-                elif isinstance(data, dict):
-                    # Some models return dict format
-                    label = data.get("label", "safe")
-                    score = data.get("score", 0.0)
-                    label_mapped = "harmful" if "toxic" in str(label).lower() or "harmful" in str(label).lower() or "1" in str(label) else "safe"
-                    results.append({"label": label_mapped, "score": float(score)})
-                else:
-                    # Fallback
-                    print(f"⚠️ Unexpected response format for text {i+1}: {type(data)}")
-                    results.append({"label": "safe", "score": 0.5})
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
                     # Rate limited - raise exception to be handled by caller
