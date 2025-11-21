@@ -115,12 +115,30 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                 r.raise_for_status()
                 data = r.json()
                 
+                # Debug: log response format for first text
+                if i == 0:
+                    print(f"📋 HF API raw response (first text): {data}")
+                    print(f"📋 Response type: {type(data)}")
+                
                 # Handle different response formats from HF API
-                # Most HF classification models return: [{"label": "LABEL_0", "score": 0.95}, {"label": "LABEL_1", "score": 0.05}]
+                # HF classification models can return:
+                # - List of lists: [[{"label": "LABEL_0", "score": 0.95}, {"label": "LABEL_1", "score": 0.05}]]
+                # - List of dicts: [{"label": "LABEL_0", "score": 0.95}, {"label": "LABEL_1", "score": 0.05}]
+                # - Single dict: {"label": "LABEL_1", "score": 0.65}
+                
                 label_mapped = "unknown"
                 score = 0.5
                 
                 try:
+                    # Handle nested list format: [[{...}, {...}]]
+                    if isinstance(data, list) and len(data) > 0:
+                        # Check if first element is also a list (nested format)
+                        if isinstance(data[0], list) and len(data[0]) > 0:
+                            data = data[0]  # Unwrap nested list
+                            if i == 0:
+                                print(f"📋 Unwrapped nested list, now: {data}")
+                    
+                    # Now process the actual list of label dicts
                     if isinstance(data, list) and len(data) > 0:
                         # Find LABEL_0 (safe) and LABEL_1 (toxic/harmful)
                         label_0_item = None
@@ -155,14 +173,21 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         
                         # Debug log for first text only
                         if i == 0:
-                            print(f"📋 HF response: {data}")
-                            print(f"✅ Detected: {label_mapped} (score={score:.4f}, LABEL_0={score_0:.4f}, LABEL_1={score_1:.4f})")
+                            print(f"🔍 LABEL_0 item: {label_0_item}")
+                            print(f"🔍 LABEL_1 item: {label_1_item}")
+                            print(f"🔍 Scores: LABEL_0={score_0:.4f}, LABEL_1={score_1:.4f}")
+                            print(f"✅ Final decision: {label_mapped} (score={score:.4f})")
+                        
+                        # IMPORTANT: Append the result!
+                        results.append({"label": label_mapped, "score": float(score)})
                     
                     elif isinstance(data, dict):
                         # Single dict response
                         label = str(data.get("label", "")).upper()
                         score = float(data.get("score", 0.5))
                         label_mapped = "harmful" if ("LABEL_1" in label or "TOXIC" in label or "1" in label) else "safe"
+                        if i == 0:
+                            print(f"✅ Single dict format: {label_mapped} (score={score:.4f})")
                         results.append({"label": label_mapped, "score": float(score)})
                     else:
                         # Unexpected format - fallback
@@ -171,6 +196,8 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                     
                 except Exception as e:
                     print(f"⚠️ Error parsing HF response for text {i+1}: {e}, data: {data}")
+                    import traceback
+                    traceback.print_exc()
                     results.append({"label": "unknown", "score": 0.5})
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
