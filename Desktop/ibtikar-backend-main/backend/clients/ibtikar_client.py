@@ -140,20 +140,17 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         score_1 = float(label_1_item.get("score", 0.0))
                         
                         # For arbert-toxic-classifier: LABEL_1 = toxic/harmful, LABEL_0 = safe
-                        # Use the higher score to determine the prediction
-                        # Also check if LABEL_1 score is above threshold (0.5) to be more confident
-                        if score_1 > score_0 and score_1 > 0.5:
-                            # LABEL_1 (toxic) has higher score and is above threshold = harmful
+                        # The model returns probabilities for both classes
+                        # If LABEL_1 (toxic) has higher probability, it's harmful
+                        # We use a simple comparison - whichever has higher score wins
+                        if score_1 >= score_0:
+                            # LABEL_1 (toxic) has equal or higher score = harmful
                             label_mapped = "harmful"
-                            score = score_1  # Use the toxic score as confidence
-                        elif score_1 > 0.7:
-                            # LABEL_1 score is very high (>70%) = definitely harmful
-                            label_mapped = "harmful"
-                            score = score_1
+                            score = score_1  # Use the toxic score as confidence (0.0 to 1.0)
                         else:
-                            # LABEL_0 (safe) has higher score or LABEL_1 is low = safe
+                            # LABEL_0 (safe) has higher score = safe
                             label_mapped = "safe"
-                            score = score_0  # Use the safe score as confidence
+                            score = score_0  # Use the safe score as confidence (0.0 to 1.0)
                     else:
                         # Fallback: use the best scoring label
                         best = max(data, key=lambda x: x.get("score", 0))
@@ -163,7 +160,7 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         label_mapped = "harmful" if "LABEL_1" in str(label) or "toxic" in str(label).lower() or "1" in str(label) else "safe"
                     
                     if i == 0:
-                        print(f"✅ Final: {label_mapped} with score {score:.4f}")
+                        print(f"✅ Final: {label_mapped} with score {score:.4f} (LABEL_0={score_0:.4f}, LABEL_1={score_1:.4f})")
                     
                     # Use the score of the predicted class (0.0 to 1.0)
                     results.append({"label": label_mapped, "score": float(score)})
