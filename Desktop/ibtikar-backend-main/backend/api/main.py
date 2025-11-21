@@ -208,12 +208,21 @@ def list_author_summaries(
 
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "service": "ibtikar-backend",
-        "env": settings.ENV,
-        "version": "0.2.0",
-    }
+    """Health check endpoint - should not require database or external services"""
+    try:
+        return {
+            "status": "ok",
+            "service": "ibtikar-backend",
+            "env": settings.ENV,
+            "version": "0.2.0",
+        }
+    except Exception as e:
+        # Even if settings fail, return basic health
+        return {
+            "status": "degraded",
+            "service": "ibtikar-backend",
+            "error": str(e),
+        }
 
 
 def ensure_local_user(db: Session) -> int:
