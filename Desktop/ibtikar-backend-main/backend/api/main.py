@@ -475,7 +475,9 @@ async def analysis_preview(
             )
 
         try:
+            print(f"📝 Calling analyze_texts with {len(posts)} posts")
             preds = await analyze_texts([p.text for p in posts])
+            print(f"✅ Received {len(preds)} predictions from analyze_texts")
         except Exception as e:
             # Handle rate limit errors from model API
             if "rate limit" in str(e).lower() or "429" in str(e) or "Rate limited" in str(e):

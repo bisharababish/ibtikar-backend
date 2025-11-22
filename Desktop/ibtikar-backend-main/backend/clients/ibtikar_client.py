@@ -258,23 +258,36 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
 
 
 async def analyze_texts(texts: List[str]) -> List[Dict]:
+    print(f"📊 analyze_texts called with {len(texts)} texts")
+    
     # If no URL configured, use stub
     if not settings.IBTIKAR_URL:
         print("⚠️ IBTIKAR_URL not configured, using stub classifier")
-        return _stub(texts)
+        stub_results = _stub(texts)
+        print(f"📊 Stub results: {stub_results}")
+        return stub_results
 
     url = settings.IBTIKAR_URL.rstrip("/")
     print(f"🔍 Using model API: {url}")
+    print(f"🔍 IBTIKAR_URL value: {settings.IBTIKAR_URL}")
 
     # Check if it's Hugging Face API
     if _is_huggingface_api(url):
+        print(f"✅ Detected as Hugging Face API")
         try:
             results = await _call_huggingface_api(texts, url)
+            print(f"📊 HF API returned {len(results)} results")
+            
+            # Log summary of results
+            harmful_count = sum(1 for r in results if r.get("label") == "harmful")
+            safe_count = sum(1 for r in results if r.get("label") == "safe")
+            print(f"📊 Result summary: {harmful_count} harmful, {safe_count} safe")
+            
             # Verify results are not all safe/0.5 (indicates a problem)
             if len(results) > 0 and all(r.get("label") == "safe" and r.get("score") == 0.5 for r in results):
-                print(f"⚠️ All results are safe/0.5 - this might indicate an API issue. Checking...")
-                # Try one more time with better error reporting
-                return await _call_huggingface_api(texts, url)
+                print(f"❌ WARNING: All results are safe/0.5 - this indicates an API issue!")
+                print(f"   This usually means the API failed silently or returned an unexpected format")
+                # Don't retry, just return what we got so user can see the issue
             return results
         except Exception as e:
             # Re-raise rate limit errors so they can be handled properly
