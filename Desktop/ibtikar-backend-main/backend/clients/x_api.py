@@ -14,9 +14,24 @@ API = "https://api.twitter.com/2"
 def _get_token_pair(user_id: int, db: Session) -> tuple[str, str | None, XToken]:
     row: XToken | None = db.query(XToken).filter(XToken.user_id == user_id).first()
     if not row:
-        raise RuntimeError(f"No token for user_id={user_id}")
-    access = dec(row.access_token)
-    refresh = dec(row.refresh_token) if row.refresh_token else None
+        # Check if user exists at all
+        from backend.db.models import User
+        user_exists = db.query(User).filter(User.id == user_id).first()
+        if not user_exists:
+            raise RuntimeError(f"No user found for user_id={user_id}. Please complete OAuth flow first.")
+        raise RuntimeError(f"No token for user_id={user_id}. Token row not found in database. Please re-link your account via /v1/oauth/x/start?user_id={user_id}")
+    
+    try:
+        access = dec(row.access_token)
+    except Exception as e:
+        raise RuntimeError(f"Failed to decrypt access token for user_id={user_id}: {e}. The token may have been encrypted with a different FERNET_KEY. Please re-link your account.")
+    
+    try:
+        refresh = dec(row.refresh_token) if row.refresh_token else None
+    except Exception as e:
+        print(f"⚠️ Failed to decrypt refresh token for user_id={user_id}: {e}. Using access token only.")
+        refresh = None
+    
     return access, refresh, row
 
 def _client(bearer: str) -> httpx.AsyncClient:
