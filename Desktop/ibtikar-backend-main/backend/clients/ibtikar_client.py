@@ -159,17 +159,32 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         if not label_1_item and len(data) > 1 and isinstance(data[1], dict):
                             label_1_item = data[1]
                         
-                        # Get scores
+                        # Get scores - handle both LABEL_0/1 format and numeric labels
                         score_0 = float(label_0_item.get("score", 0.0)) if label_0_item else 0.0
                         score_1 = float(label_1_item.get("score", 0.0)) if label_1_item else 0.0
                         
-                        # Simple rule: LABEL_1 (toxic) score >= LABEL_0 (safe) score = harmful
-                        if score_1 >= score_0:
+                        # Log what we found
+                        if i == 0:
+                            print(f"🔍 Found labels: LABEL_0={label_0_item}, LABEL_1={label_1_item}")
+                            print(f"🔍 Raw scores: score_0={score_0}, score_1={score_1}")
+                        
+                        # Decision rule: LABEL_1 (toxic/harmful) score > LABEL_0 (safe) score = harmful
+                        # Use > instead of >= to be more strict
+                        # Also, if score_1 is significantly higher (e.g., > 0.6), mark as harmful
+                        if score_1 > score_0 or score_1 > 0.6:
                             label_mapped = "harmful"
                             score = score_1
-                        else:
+                        elif score_0 > 0.6:
                             label_mapped = "safe"
                             score = score_0
+                        else:
+                            # Uncertain - use the higher score
+                            if score_1 > score_0:
+                                label_mapped = "harmful"
+                                score = score_1
+                            else:
+                                label_mapped = "safe"
+                                score = score_0
                         
                         # Debug log for first text only
                         if i == 0:
