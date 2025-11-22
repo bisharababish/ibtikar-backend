@@ -45,11 +45,16 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     # Prepare headers with optional authentication
     headers = {"Content-Type": "application/json"}
     if settings.HF_TOKEN:
+        # Validate token format (should start with hf_)
+        if not settings.HF_TOKEN.startswith("hf_"):
+            print(f"⚠️ WARNING: HF_TOKEN doesn't start with 'hf_' - might be invalid")
+            print(f"   Token value: {settings.HF_TOKEN[:10]}...")
         headers["Authorization"] = f"Bearer {settings.HF_TOKEN}"
-        print(f"🔑 Using HF_TOKEN for authentication (token length: {len(settings.HF_TOKEN)})")
+        print(f"🔑 Using HF_TOKEN for authentication (token length: {len(settings.HF_TOKEN)}, starts with: {settings.HF_TOKEN[:3]}...)")
     else:
-        print("⚠️ No HF_TOKEN configured - Hugging Face API requires authentication!")
-        print("   Add HF_TOKEN environment variable in Render settings")
+        print("⚠️ No HF_TOKEN configured - trying without authentication")
+        print("   Note: Router API may require authentication even for public models")
+        print("   Add HF_TOKEN environment variable in Render settings if requests fail")
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         for i, text in enumerate(texts):
