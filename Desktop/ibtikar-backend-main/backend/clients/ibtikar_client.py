@@ -200,7 +200,7 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                     import traceback
                     traceback.print_exc()
                     results.append({"label": "unknown", "score": 0.5})
-                except httpx.HTTPStatusError as e:
+            except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
                     # Rate limited - raise exception to be handled by caller
                     reset_timestamp = e.response.headers.get("x-rate-limit-reset")
