@@ -46,7 +46,10 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     headers = {"Content-Type": "application/json"}
     if settings.HF_TOKEN:
         headers["Authorization"] = f"Bearer {settings.HF_TOKEN}"
-        print("🔑 Using HF_TOKEN for authentication")
+        print(f"🔑 Using HF_TOKEN for authentication (token length: {len(settings.HF_TOKEN)})")
+    else:
+        print("⚠️ No HF_TOKEN configured - Hugging Face API requires authentication!")
+        print("   Add HF_TOKEN environment variable in Render settings")
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         for i, text in enumerate(texts):
