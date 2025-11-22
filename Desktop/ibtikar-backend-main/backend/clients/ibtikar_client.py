@@ -51,6 +51,7 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     async with httpx.AsyncClient(timeout=30.0) as client:
         for i, text in enumerate(texts):
             try:
+                print(f"🔍 Processing text {i+1}/{len(texts)}: {text[:50]}...")
                 # Hugging Face Inference API expects single input
                 r = await client.post(
                     url,
@@ -115,10 +116,9 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                 r.raise_for_status()
                 data = r.json()
                 
-                # Debug: log response format for first text
-                if i == 0:
-                    print(f"📋 HF API raw response (first text): {data}")
-                    print(f"📋 Response type: {type(data)}")
+                # Always log response format for debugging
+                print(f"📋 HF API response for text {i+1}: {str(data)[:200]}")
+                print(f"📋 Response type: {type(data)}")
                 
                 # Handle different response formats from HF API
                 # HF classification models can return:
@@ -190,16 +190,17 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                             print(f"✅ Single dict format: {label_mapped} (score={score:.4f})")
                         results.append({"label": label_mapped, "score": float(score)})
                     else:
-                        # Unexpected format - fallback
-                        print(f"⚠️ Unexpected response format for text {i+1}: {type(data)} - {data}")
-                        results.append({"label": "unknown", "score": 0.5})
+                        # Unexpected format - log and raise error to trigger stub
+                        print(f"❌ Unexpected response format for text {i+1}: {type(data)}")
+                        print(f"   Data: {str(data)[:500]}")
+                        raise Exception(f"Unexpected HF API response format: {type(data)}. Expected list or dict.")
                     
                 except Exception as e:
                     print(f"⚠️ Error parsing HF response for text {i+1}: {e}, data: {data}")
                     import traceback
                     traceback.print_exc()
                     results.append({"label": "unknown", "score": 0.5})
-            except httpx.HTTPStatusError as e:
+                except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
                     # Rate limited - raise exception to be handled by caller
                     reset_timestamp = e.response.headers.get("x-rate-limit-reset")
@@ -209,14 +210,27 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         f"Reset: {reset_timestamp or 'unknown'}, "
                         f"Retry after: {retry_after or 'unknown'} seconds"
                     )
-                print(f"⚠️ HF API HTTP error for text {i+1}: {e.response.status_code} - {e.response.text}")
-                results.append({"label": "safe", "score": 0.5})
+                error_text = e.response.text[:500] if e.response.text else "No error text"
+                print(f"❌ HF API HTTP error for text {i+1}: {e.response.status_code}")
+                print(f"   Error response: {error_text}")
+                print(f"   This indicates a problem with the API call - NOT using fallback")
+                # Re-raise to trigger fallback to stub, not return safe/0.5
+                raise Exception(f"HF API HTTP {e.response.status_code}: {error_text}")
             except Exception as e:
                 # Re-raise rate limit errors
-                if "rate limit" in str(e).lower() or "429" in str(e):
+                if "rate limit" in str(e).lower() or "429" in str(e) or "Rate limited" in str(e):
                     raise
-                print(f"⚠️ HF API error for text {i+1}: {type(e).__name__}: {e}")
-                results.append({"label": "safe", "score": 0.5})
+                print(f"❌ HF API error for text {i+1}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                # For non-rate-limit errors, skip this text but continue with others
+                # Use stub classification for this text
+                harmful = any(w in text.lower() for w in BAD_LOCAL)
+                results.append({
+                    "label": "harmful" if harmful else "safe",
+                    "score": 0.85 if harmful else 0.70,
+                })
+                print(f"   Using stub classification for text {i+1}")
     
     print(f"✅ Processed {len(results)}/{len(texts)} texts via HF API")
     
@@ -231,20 +245,31 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
 async def analyze_texts(texts: List[str]) -> List[Dict]:
     # If no URL configured, use stub
     if not settings.IBTIKAR_URL:
+        print("⚠️ IBTIKAR_URL not configured, using stub classifier")
         return _stub(texts)
 
     url = settings.IBTIKAR_URL.rstrip("/")
+    print(f"🔍 Using model API: {url}")
 
     # Check if it's Hugging Face API
     if _is_huggingface_api(url):
         try:
-            return await _call_huggingface_api(texts, url)
+            results = await _call_huggingface_api(texts, url)
+            # Verify results are not all safe/0.5 (indicates a problem)
+            if len(results) > 0 and all(r.get("label") == "safe" and r.get("score") == 0.5 for r in results):
+                print(f"⚠️ All results are safe/0.5 - this might indicate an API issue. Checking...")
+                # Try one more time with better error reporting
+                return await _call_huggingface_api(texts, url)
+            return results
         except Exception as e:
             # Re-raise rate limit errors so they can be handled properly
             if "rate limit" in str(e).lower() or "429" in str(e) or "Rate limited" in str(e):
                 print(f"❌ Hugging Face API rate limited: {e}")
                 raise
-            print(f"⚠️ Hugging Face API error: {e}, using stub")
+            print(f"⚠️ Hugging Face API error: {e}")
+            import traceback
+            traceback.print_exc()
+            print(f"   Falling back to stub classifier")
             return _stub(texts)
 
     # Legacy API format (original IbtikarAI service)
