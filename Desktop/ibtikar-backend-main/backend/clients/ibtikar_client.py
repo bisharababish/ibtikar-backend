@@ -37,14 +37,25 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     if "api-inference.huggingface.co" in url:
         # Extract model path: models/username/model-name
         model_path = url.split("models/")[-1] if "models/" in url else url.split("/")[-1]
-        # Use new router endpoint (without /v1/ - router API doesn't use it)
-        url = f"https://router.huggingface.co/hf-inference/models/{model_path}"
+        # Use new router endpoint with /v1/ prefix
+        url = f"https://router.huggingface.co/v1/models/{model_path}"
         print(f"🔄 Converted deprecated API URL to router format: {url}")
     
-    # If router URL has /v1/, remove it (router API doesn't use v1)
-    if "router.huggingface.co" in url and "/v1/" in url:
-        url = url.replace("/v1/", "/")
-        print(f"🔄 Removed /v1/ from router URL: {url}")
+    # Ensure router URL uses /v1/ format (router API requires /v1/)
+    if "router.huggingface.co" in url and "/hf-inference/" in url:
+        # Convert from /hf-inference/models/... to /v1/models/...
+        model_path = url.split("/hf-inference/models/")[-1] if "/hf-inference/models/" in url else None
+        if model_path:
+            url = f"https://router.huggingface.co/v1/models/{model_path}"
+            print(f"🔄 Fixed router URL format: {url}")
+    
+    # If router URL doesn't have /v1/, add it
+    if "router.huggingface.co" in url and "/v1/" not in url and "/models/" in url:
+        # Extract model path
+        parts = url.split("/models/")
+        if len(parts) == 2:
+            url = f"https://router.huggingface.co/v1/models/{parts[1]}"
+            print(f"🔄 Added /v1/ to router URL: {url}")
     
     print(f"🔍 Calling Hugging Face API: {url}")
     
