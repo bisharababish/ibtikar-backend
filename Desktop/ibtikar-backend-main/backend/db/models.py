@@ -63,6 +63,25 @@ class XToken(Base):
         return f"<XToken id={self.id} user_id={self.user_id}>"
 
 
+class OAuthState(Base):
+    """
+    Stores OAuth PKCE state and code_verifier for the OAuth flow.
+    This replaces in-memory state storage to work with multiple instances/restarts.
+    """
+
+    __tablename__ = "oauth_states"
+
+    state = Column(String, primary_key=True, index=True)  # OAuth state token
+    code_verifier = Column(String, nullable=False)  # PKCE code verifier
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)  # Expiration time
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self) -> str:
+        return f"<OAuthState state={self.state[:10]}... user_id={self.user_id}>"
+
+
 class Prediction(Base):
     """
     Stores one IbtikarAI prediction per post.

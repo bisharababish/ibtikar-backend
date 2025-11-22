@@ -11,7 +11,7 @@ from ..db.init_db import init_db
 from ..db.session import get_db
 from ..db import models
 from ..core.crypto import enc
-from ..core.memory import new_state, put_state, pop_state
+from ..core.memory import new_state, put_state, pop_state, cleanup_expired_states
 from ..clients.x_client import generate_pkce, build_auth_url, exchange_code_for_token
 from ..core.schemas import AnalysisResponse, AnalysisItem
 from ..core.normalize import x_tweets_to_posts
@@ -244,8 +244,9 @@ async def x_oauth_start(user_id: int = 1, db: Session = Depends(get_db)):
 
     verifier, challenge = generate_pkce()
     state = new_state()
-    # store BOTH verifier and user_id
-    put_state(state, verifier, user_id)
+    # store BOTH verifier and user_id in database (not memory)
+    # Increased TTL to 30 minutes to allow more time for user authorization
+    put_state(state, verifier, user_id, ttl_seconds=1800, db=db)
     twitter_auth_url = build_auth_url(state, challenge)
     
     # Direct redirect to Twitter - this should work better than HTML page
@@ -274,10 +275,12 @@ async def x_oauth_callback(
         print(f"❌ OAuth callback missing parameters: code={code is not None}, state={state is not None}")
         raise HTTPException(status_code=400, detail="Missing code/state")
 
-    state_data = pop_state(state)
+    state_data = pop_state(state, db=db)
     if not state_data:
         print(f"❌ OAuth callback invalid/expired state: {state}")
-        raise HTTPException(status_code=400, detail="State expired/invalid")
+        # Clean up expired states
+        cleanup_expired_states(db)
+        raise HTTPException(status_code=400, detail="State expired/invalid. Please try the OAuth flow again.")
 
     code_verifier = state_data["verifier"]
     user_id = int(state_data["user_id"])
