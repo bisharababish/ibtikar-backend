@@ -77,6 +77,7 @@ def _store_tokens(row: XToken, token_json: dict, db: Session) -> str:
 async def get_me(user_id: int, db: Session) -> Dict[str, Any]:
     """
     Calls /users/me, auto-refreshes on 401 once, then retries.
+    Returns dict with rate_limited key if 429.
     """
     access, refresh, row = _get_token_pair(user_id, db)
 
@@ -89,12 +90,27 @@ async def get_me(user_id: int, db: Session) -> Dict[str, Any]:
         tj = await _refresh_access_token(refresh)
         access = _store_tokens(row, tj, db)
         r = await _call(access)
+    
+    # Handle rate limiting
+    if r.status_code == 429:
+        reset = r.headers.get("x-rate-limit-reset")
+        limit = r.headers.get("x-rate-limit-limit", "unknown")
+        remaining = r.headers.get("x-rate-limit-remaining", "0")
+        return {
+            "rate_limited": True,
+            "resource": "users/me",
+            "reset": reset,
+            "limit": limit,
+            "remaining": remaining,
+        }
 
     r.raise_for_status()
     return r.json()
 
 async def get_my_recent_tweets(user_id: int, db: Session, max_results: int = 20) -> Dict[str, Any]:
     me = await get_me(user_id, db)
+    if isinstance(me, dict) and me.get("rate_limited"):
+        return me  # Return rate limit info
     uid = me["data"]["id"]
     access, _, _ = _get_token_pair(user_id, db)
     async with _client(access) as c:
@@ -115,6 +131,8 @@ async def get_following_feed(user_id: int, db: Session, authors_limit: int = 25,
     Returns {"data": [...]} or {"rate_limited": True, ...} when 429.
     """
     me = await get_me(user_id, db)
+    if isinstance(me, dict) and me.get("rate_limited"):
+        return me  # Return rate limit info from get_me
     uid = me["data"]["id"]
     access, _, _ = _get_token_pair(user_id, db)
 
