@@ -48,17 +48,24 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     
     print(f"🔍 Extracted model path: {model_path}")
     
-    # Router API is returning 404 - use Inference API format directly
-    # Inference API format: https://api-inference.huggingface.co/models/{model_path}
-    # This is the standard, reliable format that works for all models
-    if "router.huggingface.co" in url:
-        print(f"🔄 Converting router API URL to Inference API format (router returns 404)")
-        url = f"https://api-inference.huggingface.co/models/{model_path}"
-    elif "api-inference.huggingface.co" not in url:
-        # If URL doesn't specify inference API, use it
-        url = f"https://api-inference.huggingface.co/models/{model_path}"
+    # Inference API is DEPRECATED (returns 410 Gone)
+    # MUST use Router API: https://router.huggingface.co/v1/models/{model_path}
+    # If URL is already router format, use it; otherwise convert to router
+    if "api-inference.huggingface.co" in url:
+        print(f"🔄 Converting deprecated Inference API URL to Router API format")
+        url = f"https://router.huggingface.co/v1/models/{model_path}"
+    elif "router.huggingface.co" not in url:
+        # If URL doesn't specify router API, use router
+        url = f"https://router.huggingface.co/v1/models/{model_path}"
     
-    print(f"🔍 Using Hugging Face Inference API: {url}")
+    # Ensure router URL has correct format
+    if "router.huggingface.co" in url and "/v1/models/" not in url:
+        # Add /v1/ if missing
+        if "/models/" in url:
+            model_part = url.split("/models/")[-1]
+            url = f"https://router.huggingface.co/v1/models/{model_part}"
+    
+    print(f"🔍 Using Hugging Face Router API: {url}")
     
     # Prepare headers with optional authentication
     headers = {"Content-Type": "application/json"}
@@ -78,7 +85,8 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
         for i, text in enumerate(texts):
             try:
                 print(f"🔍 Processing text {i+1}/{len(texts)}: {text[:50]}...")
-                # Hugging Face Inference API expects single input
+                # Hugging Face Router API expects single input
+                # Format: POST with {"inputs": text}
                 r = await client.post(
                     url,
                     json={"inputs": text},
@@ -309,17 +317,31 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
     if not model_path:
         model_path = "bisharababish/arabert-toxic-classifier"
     
-    # ALWAYS use Inference API format
-    inference_api_url = f"https://api-inference.huggingface.co/models/{model_path}"
-    print(f"🔄 FORCING Inference API format: {inference_api_url}")
-    print(f"🔍 Original URL was: {url}")
+    # Inference API is DEPRECATED (410 Gone) - MUST use Router API
+    # Router API format: https://router.huggingface.co/v1/models/{model_path}
+    if "api-inference.huggingface.co" in url:
+        print(f"🔄 Converting deprecated Inference API URL to Router API format")
+        url = f"https://router.huggingface.co/v1/models/{model_path}"
+    elif "router.huggingface.co" not in url:
+        # If URL doesn't specify router API, use router
+        url = f"https://router.huggingface.co/v1/models/{model_path}"
+    
+    # Ensure router URL has correct format
+    if "router.huggingface.co" in url and "/v1/models/" not in url:
+        # Add /v1/ if missing
+        if "/models/" in url:
+            model_part = url.split("/models/")[-1]
+            url = f"https://router.huggingface.co/v1/models/{model_part}"
+    
+    print(f"✅ Using Hugging Face Router API: {url}")
+    print(f"🔍 Original URL was: {settings.IBTIKAR_URL}")
 
     # Check if it's Hugging Face API
     if _is_huggingface_api(url):
         print(f"✅ Detected as Hugging Face API")
-        try:
-            # Use Inference API URL
-            results = await _call_huggingface_api(texts, inference_api_url)
+            try:
+                # Use Router API URL (Inference API is deprecated)
+                results = await _call_huggingface_api(texts, url)
             print(f"📊 HF API returned {len(results)} results")
             
             # Log summary of results
