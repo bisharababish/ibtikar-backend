@@ -26,7 +26,7 @@ def _stub(texts: List[str]) -> List[Dict]:
 
 def _is_huggingface_api(url: str) -> bool:
     """Check if URL is a Hugging Face Inference API endpoint."""
-    return "api-inference.huggingface.co" in url or "router.huggingface.co" in url or "hf.space" in url
+    return "api-inference.huggingface.co" in url or "router.huggingface.co" in url or "hf.space" in url or "huggingface.co" in url
 
 
 async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
