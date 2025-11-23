@@ -1,0 +1,60 @@
+import gradio as gr
+from transformers import pipeline
+import os
+
+# Load the model - Xet storage should handle LFS pointers automatically
+model_name = "Bisharababish/arabert-toxic-classifier"
+
+print("Loading model from Hugging Face Hub...")
+print("Note: Model uses Xet storage which automatically handles LFS pointers")
+
+# Load model with explicit handling for Xet/LFS
+try:
+    # Pipeline will automatically download and resolve Xet/LFS files
+    classifier = pipeline(
+        "text-classification", 
+        model=model_name,
+        revision="main",
+        trust_remote_code=True  # In case model needs custom code
+    )
+    print("✅ Model loaded successfully!")
+except Exception as e:
+    print(f"❌ Error loading model: {e}")
+    import traceback
+    traceback.print_exc()
+    raise
+
+def classify(text):
+    """Classify text as harmful or safe"""
+    try:
+        result = classifier(text)
+        
+        # Handle response format
+        if isinstance(result, list) and len(result) > 0:
+            label = result[0].get("label", "")
+            score = result[0].get("score", 0.5)
+            
+            # LABEL_1 = harmful, LABEL_0 = safe
+            if "LABEL_1" in label or label == "1" or "harmful" in label.lower():
+                return [{"label": "harmful", "score": float(score)}]
+            else:
+                return [{"label": "safe", "score": float(score)}]
+        
+        return [{"label": "unknown", "score": 0.5}]
+    except Exception as e:
+        print(f"Classification error: {e}")
+        import traceback
+        traceback.print_exc()
+        return [{"label": "unknown", "score": 0.5}]
+
+# Create Gradio interface with API endpoint
+iface = gr.Interface(
+    fn=classify,
+    inputs="text",
+    outputs="json",
+    api_name="predict",
+    title="Arabic Toxic Text Classifier"
+)
+
+iface.launch()
+

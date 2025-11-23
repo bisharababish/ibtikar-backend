@@ -82,3 +82,5 @@ IBTIKAR_URL=https://<your-username>-arabert-toxic-classifier.hf.space
 ✅ **Lightweight backend** - No PyTorch/Transformers in Render service
 
 
+
+

@@ -298,11 +298,12 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
     print(f"✅ IBTIKAR_URL is configured: {url}")
     
     # If URL is just a model path (like "Bisharababish/arabert-toxic-classifier"),
-    # convert it to Router API format
+    # convert it to Inference API URL (even though deprecated, it might still work)
     if not url.startswith("http") and "/" in url and not url.startswith("/"):
-        print(f"🔄 Converting model path to Router API URL")
-        url = f"https://router.huggingface.co/v1/models/{url}"
-        print(f"✅ Using Router API URL: {url}")
+        print(f"🔄 Converting model path to Inference API URL")
+        url = f"https://api-inference.huggingface.co/models/{url}"
+        print(f"✅ Using Inference API URL: {url}")
+        print(f"⚠️  Note: Inference API is deprecated but may still work. If this fails, deploy a Space instead.")
     else:
         print(f"✅ Using URL as configured: {url}")
 

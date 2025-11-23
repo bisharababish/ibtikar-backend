@@ -1,0 +1,51 @@
+import gradio as gr
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from huggingface_hub import snapshot_download
+import torch
+
+model_name = "Bisharababish/arabert-toxic-classifier"
+
+print("Downloading model files from Hugging Face Hub...")
+
+# Use snapshot_download to download ALL files including resolving LFS pointers
+model_path = snapshot_download(
+    repo_id=model_name,
+    revision="main",
+    local_files_only=False  # Force download from Hub
+)
+
+print(f"✅ Model downloaded to: {model_path}")
+
+# Now load from the downloaded directory
+print("Loading tokenizer and model...")
+tokenizer = AutoTokenizer.from_pretrained(model_path)
+model = AutoModelForSequenceClassification.from_pretrained(model_path)
+
+print("✅ Model loaded successfully!")
+
+def classify(text):
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=256)
+    with torch.no_grad():
+        outputs = model(**inputs)
+        logits = outputs.logits
+        probs = torch.softmax(logits, dim=-1)
+    
+    # Get probabilities for each class
+    prob_safe = float(probs[0][0])
+    prob_harmful = float(probs[0][1])
+    
+    # LABEL_0 = safe, LABEL_1 = harmful
+    if prob_harmful > prob_safe:
+        return [{"label": "harmful", "score": prob_harmful}]
+    else:
+        return [{"label": "safe", "score": prob_safe}]
+
+iface = gr.Interface(
+    fn=classify,
+    inputs="text",
+    outputs="json",
+    api_name="predict"
+)
+
+iface.launch()
+

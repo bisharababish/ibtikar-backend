@@ -1,0 +1,67 @@
+import gradio as gr
+from transformers import pipeline
+from huggingface_hub import snapshot_download
+import os
+
+# Load the model - Hugging Face Hub will automatically resolve Git LFS pointers
+model_name = "Bisharababish/arabert-toxic-classifier"
+
+print("Downloading model from Hugging Face Hub (will resolve LFS automatically)...")
+# Force download from Hub which will resolve LFS pointers
+try:
+    # Download the entire model repository (Hub handles LFS automatically)
+    model_path = snapshot_download(
+        repo_id=model_name,
+        revision="main",
+        cache_dir=None,  # Use default cache
+        resume_download=True
+    )
+    print(f"Model downloaded to: {model_path}")
+except Exception as e:
+    print(f"Error downloading model: {e}")
+    # Fallback: use pipeline which should also handle LFS
+    model_path = model_name
+
+print("Creating classifier pipeline...")
+# Use pipeline - it will automatically handle LFS when loading from Hub
+classifier = pipeline(
+    "text-classification", 
+    model=model_name,
+    revision="main",
+    use_auth_token=None  # Public model
+)
+
+print("Model loaded successfully!")
+
+def classify(text):
+    """Classify text as harmful or safe"""
+    try:
+        result = classifier(text)
+        
+        # Handle response format
+        if isinstance(result, list) and len(result) > 0:
+            label = result[0].get("label", "")
+            score = result[0].get("score", 0.5)
+            
+            # LABEL_1 = harmful, LABEL_0 = safe
+            if "LABEL_1" in label or label == "1" or "harmful" in label.lower():
+                return [{"label": "harmful", "score": float(score)}]
+            else:
+                return [{"label": "safe", "score": float(score)}]
+        
+        return [{"label": "unknown", "score": 0.5}]
+    except Exception as e:
+        print(f"Classification error: {e}")
+        return [{"label": "unknown", "score": 0.5}]
+
+# Create Gradio interface with API endpoint
+iface = gr.Interface(
+    fn=classify,
+    inputs="text",
+    outputs="json",
+    api_name="predict",
+    title="Arabic Toxic Text Classifier"
+)
+
+iface.launch()
+

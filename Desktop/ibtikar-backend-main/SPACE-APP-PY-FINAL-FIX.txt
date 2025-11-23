@@ -1,0 +1,70 @@
+import gradio as gr
+from transformers import pipeline
+from huggingface_hub import hf_hub_download
+import os
+
+model_name = "Bisharababish/arabert-toxic-classifier"
+
+print("Downloading model files from Hugging Face Hub...")
+
+# Force download actual files (not LFS pointers) using hf_hub_download
+# This should resolve LFS pointers automatically
+try:
+    # Download config.json (already fixed, should work)
+    config_path = hf_hub_download(
+        repo_id=model_name,
+        filename="config.json",
+        revision="main"
+    )
+    print(f"✅ Downloaded config.json from: {config_path}")
+    
+    # Download model.safetensors - this should resolve LFS pointer
+    model_path = hf_hub_download(
+        repo_id=model_name,
+        filename="model.safetensors",
+        revision="main",
+        resume_download=True
+    )
+    print(f"✅ Downloaded model.safetensors from: {model_path}")
+    
+    # Check file size - should be ~540MB, not 137 bytes
+    file_size = os.path.getsize(model_path)
+    print(f"📊 Model file size: {file_size} bytes ({file_size / 1024 / 1024:.2f} MB)")
+    
+    if file_size < 1000000:  # Less than 1MB means it's probably still a pointer
+        raise Exception(f"Model file too small ({file_size} bytes) - still a Git LFS pointer. Need to upload actual model file.")
+    
+except Exception as e:
+    print(f"❌ Error downloading model files: {e}")
+    raise
+
+# Now load the model using the local paths
+print("Loading model from downloaded files...")
+classifier = pipeline(
+    "text-classification", 
+    model=model_name,  # Use model_name - transformers will find the downloaded files
+    revision="main"
+)
+
+print("✅ Model loaded successfully!")
+
+def classify(text):
+    result = classifier(text)
+    if isinstance(result, list) and len(result) > 0:
+        label = result[0].get("label", "")
+        score = result[0].get("score", 0.5)
+        if "LABEL_1" in label or label == "1":
+            return [{"label": "harmful", "score": float(score)}]
+        else:
+            return [{"label": "safe", "score": float(score)}]
+    return [{"label": "unknown", "score": 0.5}]
+
+iface = gr.Interface(
+    fn=classify,
+    inputs="text",
+    outputs="json",
+    api_name="predict"
+)
+
+iface.launch()
+
