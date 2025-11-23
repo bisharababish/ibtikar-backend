@@ -261,17 +261,12 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                 # Re-raise rate limit errors
                 if "rate limit" in str(e).lower() or "429" in str(e) or "Rate limited" in str(e):
                     raise
+                # DO NOT use stub - raise error so we can see what's wrong
                 print(f"❌ HF API error for text {i+1}: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
-                # For non-rate-limit errors, skip this text but continue with others
-                # Use stub classification for this text
-                harmful = any(w in text.lower() for w in BAD_LOCAL)
-                results.append({
-                    "label": "harmful" if harmful else "safe",
-                    "score": 0.85 if harmful else 0.70,
-                })
-                print(f"   Using stub classification for text {i+1}")
+                # Raise error instead of using stub
+                raise Exception(f"HF API call failed for text {i+1}: {e}") from e
     
     print(f"✅ Processed {len(results)}/{len(texts)} texts via HF API")
     
@@ -300,13 +295,31 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
 
     url = settings.IBTIKAR_URL.rstrip("/")
     print(f"✅ IBTIKAR_URL is configured: {url}")
-    print(f"🔍 Using model API: {url}")
+    
+    # FORCE Inference API format (router API gives 404)
+    # Extract model path
+    model_path = None
+    if "/models/" in url:
+        model_path = url.split("/models/")[-1].rstrip("/")
+    elif "router.huggingface.co" in url and "/v1/models/" in url:
+        model_path = url.split("/v1/models/")[-1].rstrip("/")
+    elif "api-inference.huggingface.co" in url:
+        model_path = url.split("models/")[-1] if "models/" in url else url.split("/")[-1]
+    
+    if not model_path:
+        model_path = "bisharababish/arabert-toxic-classifier"
+    
+    # ALWAYS use Inference API format
+    inference_api_url = f"https://api-inference.huggingface.co/models/{model_path}"
+    print(f"🔄 FORCING Inference API format: {inference_api_url}")
+    print(f"🔍 Original URL was: {url}")
 
     # Check if it's Hugging Face API
     if _is_huggingface_api(url):
         print(f"✅ Detected as Hugging Face API")
         try:
-            results = await _call_huggingface_api(texts, url)
+            # Use Inference API URL
+            results = await _call_huggingface_api(texts, inference_api_url)
             print(f"📊 HF API returned {len(results)} results")
             
             # Log summary of results
@@ -314,25 +327,22 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
             safe_count = sum(1 for r in results if r.get("label") == "safe")
             print(f"📊 Result summary: {harmful_count} harmful, {safe_count} safe")
             
-            # Verify results are not all safe/0.5 (indicates a problem)
-            if len(results) > 0 and all(r.get("label") == "safe" and r.get("score") == 0.5 for r in results):
-                print(f"❌ WARNING: All results are safe/0.5 - this indicates an API issue!")
-                print(f"   This usually means the API failed silently or returned an unexpected format")
-                # Don't retry, just return what we got so user can see the issue
+            # Check if all results are safe/0.7 (stub classifier signature)
+            if len(results) > 0 and all(r.get("label") == "safe" and r.get("score") == 0.7 for r in results):
+                print(f"❌ WARNING: All results are safe/0.7 - this looks like stub classifier output!")
+                print(f"   The API call may have failed silently. Check logs above for errors.")
             return results
         except Exception as e:
             # Re-raise rate limit errors so they can be handled properly
             if "rate limit" in str(e).lower() or "429" in str(e) or "Rate limited" in str(e):
                 print(f"❌ Hugging Face API rate limited: {e}")
                 raise
-            print(f"❌ Hugging Face API error (this is why stub is being used): {type(e).__name__}: {e}")
+            # DO NOT fall back to stub - raise the error so we can see what's wrong
+            print(f"❌ Hugging Face API error: {e}")
             import traceback
             traceback.print_exc()
-            print(f"⚠️ Falling back to stub classifier - this means API is not working!")
-            print(f"   Check the error above to see why Hugging Face API failed")
-            stub_results = _stub(texts)
-            print(f"📊 Stub classifier returned: {stub_results}")
-            return stub_results
+            print(f"❌ NOT using stub classifier - raising error to diagnose the issue")
+            raise Exception(f"Hugging Face API failed: {e}. Please check logs and API configuration.") from e
 
     # Legacy API format (original IbtikarAI service)
     url = url + "/predict"
