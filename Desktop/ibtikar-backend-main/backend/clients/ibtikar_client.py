@@ -87,16 +87,48 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         headers=headers
                     )
                 
-                # Handle deprecated API (410) - try Router API as fallback
-                if r.status_code == 410:
-                    print(f"⚠️ Inference API is deprecated (410), trying Router API...")
+                # Handle 404 or 410 - try Router API as fallback (only on first text to avoid multiple attempts)
+                if (r.status_code == 404 or r.status_code == 410) and i == 0:
+                    print(f"⚠️ Inference API returned {r.status_code}, trying Router API...")
                     router_url = f"https://router.huggingface.co/v1/models/{model_path}"
                     print(f"🔄 Trying Router API: {router_url}")
-                    r = await client.post(
+                    router_r = await client.post(
                         router_url,
                         json={"inputs": text},
                         headers=headers
                     )
+                    # If Router API works, use it for all remaining texts
+                    if router_r.status_code == 200:
+                        print(f"✅ Router API works! Using it for all texts.")
+                        url = router_url  # Update URL for remaining texts
+                        r = router_r  # Use Router API response
+                    elif router_r.status_code == 503:
+                        # Model loading on Router API, wait and retry
+                        print(f"⏳ Router API model is loading (503), waiting 20s...")
+                        await asyncio.sleep(20)
+                        router_r = await client.post(
+                            router_url,
+                            json={"inputs": text},
+                            headers=headers
+                        )
+                        if router_r.status_code == 200:
+                            print(f"✅ Router API works after waiting! Using it for all texts.")
+                            url = router_url
+                            r = router_r
+                        else:
+                            print(f"❌ Router API still loading or failed: {router_r.status_code}")
+                            raise Exception(f"Router API not available: {router_r.status_code} - {router_r.text[:200] if router_r.text else 'No error text'}")
+                    else:
+                        print(f"❌ Router API also failed with {router_r.status_code}")
+                        error_msg = router_r.text[:200] if router_r.text else 'No error text'
+                        print(f"   Error: {error_msg}")
+                        # Raise error with both attempts
+                        raise Exception(f"Inference API ({r.status_code}) and Router API ({router_r.status_code}) both failed. Router error: {error_msg}")
+                
+                # If still 404/410 after Router API attempt, raise error
+                if (r.status_code == 404 or r.status_code == 410) and i == 0:
+                    error_text = r.text[:500] if r.text else "No error text"
+                    raise Exception(f"HF API HTTP {r.status_code}: {error_text}")
                 
                 # Handle rate limiting properly
                 if r.status_code == 429:
@@ -269,8 +301,30 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                 print(f"   Error response: {error_text}")
                 print(f"   URL tried: {url}")
                 
-                # Don't try alternatives - just raise the error so user knows what's wrong
-                print(f"   This indicates a problem with the API call")
+                # Try Router API as last resort if we haven't already
+                if (e.response.status_code == 404 or e.response.status_code == 410) and i == 0 and "router.huggingface.co" not in url:
+                    print(f"🔄 Trying Router API as fallback...")
+                    try:
+                        router_url = f"https://router.huggingface.co/v1/models/{model_path}"
+                        router_r = await client.post(
+                            router_url,
+                            json={"inputs": text},
+                            headers=headers
+                        )
+                        if router_r.status_code == 200 or router_r.status_code == 503:
+                            print(f"✅ Router API works! Using it for all texts.")
+                            url = router_url
+                            # If 503, wait and retry
+                            if router_r.status_code == 503:
+                                await asyncio.sleep(20)
+                                router_r = await client.post(router_url, json={"inputs": text}, headers=headers)
+                            r = router_r
+                            # Continue processing this text
+                            continue
+                    except Exception as router_e:
+                        print(f"❌ Router API also failed: {router_e}")
+                
+                # If we get here, both APIs failed
                 raise Exception(f"HF API HTTP {e.response.status_code}: {error_text}")
             except Exception as e:
                 # Re-raise rate limit errors
