@@ -297,9 +297,14 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
     url = settings.IBTIKAR_URL.rstrip("/")
     print(f"✅ IBTIKAR_URL is configured: {url}")
     
-    # Use URL exactly as configured - no auto-conversion
-    # User should set IBTIKAR_URL to a working endpoint
-    print(f"✅ Using URL as configured: {url}")
+    # If URL is just a model path (like "Bisharababish/arabert-toxic-classifier"),
+    # convert it to Router API format
+    if not url.startswith("http") and "/" in url and not url.startswith("/"):
+        print(f"🔄 Converting model path to Router API URL")
+        url = f"https://router.huggingface.co/v1/models/{url}"
+        print(f"✅ Using Router API URL: {url}")
+    else:
+        print(f"✅ Using URL as configured: {url}")
 
     # Check if it's Hugging Face API
     if _is_huggingface_api(url):
