@@ -33,31 +33,32 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     """Call Hugging Face Inference API for each text."""
     results = []
     
-    # Convert old API URL to new format if needed
-    if "api-inference.huggingface.co" in url:
-        # Extract model path: models/username/model-name
+    # Extract model path from various URL formats
+    model_path = None
+    if "/models/" in url:
+        model_path = url.split("/models/")[-1].rstrip("/")
+    elif "router.huggingface.co" in url and "/v1/models/" in url:
+        model_path = url.split("/v1/models/")[-1].rstrip("/")
+    elif "api-inference.huggingface.co" in url:
         model_path = url.split("models/")[-1] if "models/" in url else url.split("/")[-1]
-        # Use new router endpoint with /v1/ prefix
-        url = f"https://router.huggingface.co/v1/models/{model_path}"
-        print(f"🔄 Converted deprecated API URL to router format: {url}")
     
-    # Ensure router URL uses /v1/ format (router API requires /v1/)
-    if "router.huggingface.co" in url and "/hf-inference/" in url:
-        # Convert from /hf-inference/models/... to /v1/models/...
-        model_path = url.split("/hf-inference/models/")[-1] if "/hf-inference/models/" in url else None
-        if model_path:
-            url = f"https://router.huggingface.co/v1/models/{model_path}"
-            print(f"🔄 Fixed router URL format: {url}")
+    if not model_path:
+        print(f"⚠️ Could not extract model path from URL: {url}")
+        model_path = "bisharababish/arabert-toxic-classifier"
     
-    # If router URL doesn't have /v1/, add it
-    if "router.huggingface.co" in url and "/v1/" not in url and "/models/" in url:
-        # Extract model path
-        parts = url.split("/models/")
-        if len(parts) == 2:
-            url = f"https://router.huggingface.co/v1/models/{parts[1]}"
-            print(f"🔄 Added /v1/ to router URL: {url}")
+    print(f"🔍 Extracted model path: {model_path}")
     
-    print(f"🔍 Calling Hugging Face API: {url}")
+    # Router API is returning 404 - use Inference API format directly
+    # Inference API format: https://api-inference.huggingface.co/models/{model_path}
+    # This is the standard, reliable format that works for all models
+    if "router.huggingface.co" in url:
+        print(f"🔄 Converting router API URL to Inference API format (router returns 404)")
+        url = f"https://api-inference.huggingface.co/models/{model_path}"
+    elif "api-inference.huggingface.co" not in url:
+        # If URL doesn't specify inference API, use it
+        url = f"https://api-inference.huggingface.co/models/{model_path}"
+    
+    print(f"🔍 Using Hugging Face Inference API: {url}")
     
     # Prepare headers with optional authentication
     headers = {"Content-Type": "application/json"}
@@ -284,17 +285,22 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
 
 async def analyze_texts(texts: List[str]) -> List[Dict]:
     print(f"📊 analyze_texts called with {len(texts)} texts")
+    print(f"🔍 IBTIKAR_URL from settings: {repr(settings.IBTIKAR_URL)}")
+    print(f"🔍 HF_TOKEN configured: {bool(settings.HF_TOKEN)}")
+    if settings.HF_TOKEN:
+        print(f"🔍 HF_TOKEN starts with: {settings.HF_TOKEN[:10]}...")
     
     # If no URL configured, use stub
     if not settings.IBTIKAR_URL:
-        print("⚠️ IBTIKAR_URL not configured, using stub classifier")
+        print("❌ IBTIKAR_URL not configured - this is why we're using stub classifier!")
+        print("   Please set IBTIKAR_URL environment variable in Render settings")
         stub_results = _stub(texts)
-        print(f"📊 Stub results: {stub_results}")
+        print(f"📊 Stub results (should show harmful for toxic Arabic text, but won't): {stub_results}")
         return stub_results
 
     url = settings.IBTIKAR_URL.rstrip("/")
+    print(f"✅ IBTIKAR_URL is configured: {url}")
     print(f"🔍 Using model API: {url}")
-    print(f"🔍 IBTIKAR_URL value: {settings.IBTIKAR_URL}")
 
     # Check if it's Hugging Face API
     if _is_huggingface_api(url):
