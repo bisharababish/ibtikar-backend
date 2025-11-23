@@ -325,11 +325,14 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
             if "rate limit" in str(e).lower() or "429" in str(e) or "Rate limited" in str(e):
                 print(f"❌ Hugging Face API rate limited: {e}")
                 raise
-            print(f"⚠️ Hugging Face API error: {e}")
+            print(f"❌ Hugging Face API error (this is why stub is being used): {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
-            print(f"   Falling back to stub classifier")
-            return _stub(texts)
+            print(f"⚠️ Falling back to stub classifier - this means API is not working!")
+            print(f"   Check the error above to see why Hugging Face API failed")
+            stub_results = _stub(texts)
+            print(f"📊 Stub classifier returned: {stub_results}")
+            return stub_results
 
     # Legacy API format (original IbtikarAI service)
     url = url + "/predict"
