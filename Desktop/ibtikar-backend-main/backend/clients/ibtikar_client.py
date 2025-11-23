@@ -125,10 +125,15 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         # Raise error with both attempts
                         raise Exception(f"Inference API ({r.status_code}) and Router API ({router_r.status_code}) both failed. Router error: {error_msg}")
                 
-                # If still 404/410 after Router API attempt, raise error
-                if (r.status_code == 404 or r.status_code == 410) and i == 0:
+                # If still 404/410 after Router API attempt, provide helpful error
+                if (r.status_code == 404 or r.status_code == 410):
                     error_text = r.text[:500] if r.text else "No error text"
-                    raise Exception(f"HF API HTTP {r.status_code}: {error_text}")
+                    raise Exception(
+                        f"HF API HTTP {r.status_code}: Model not found or not accessible. "
+                        f"Error: {error_text}. "
+                        f"NOTE: If your model files on Hugging Face are Git LFS pointers (not actual files), "
+                        f"the Inference API cannot load them. You need to upload the actual model files (~540MB) to Hugging Face."
+                    )
                 
                 # Handle rate limiting properly
                 if r.status_code == 429:
