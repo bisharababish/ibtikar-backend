@@ -49,21 +49,32 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     print(f"🔍 Extracted model path: {model_path}")
     
     # Inference API is DEPRECATED (returns 410 Gone)
-    # MUST use Router API: https://router.huggingface.co/v1/models/{model_path}
-    # If URL is already router format, use it; otherwise convert to router
+    # MUST use Router API - try multiple formats
+    # Format 1: https://router.huggingface.co/v1/models/{model_path}
+    # Format 2: https://router.huggingface.co/hf-inference/v1/models/{model_path}
+    # Format 3: https://huggingface.co/api/models/{model_path} (fallback)
+    
+    # Try different Router API formats
+    router_formats = [
+        f"https://router.huggingface.co/v1/models/{model_path}",
+        f"https://router.huggingface.co/hf-inference/v1/models/{model_path}",
+        f"https://api-inference.huggingface.co/models/{model_path}",  # Deprecated but might still work
+    ]
+    
     if "api-inference.huggingface.co" in url:
         print(f"🔄 Converting deprecated Inference API URL to Router API format")
-        url = f"https://router.huggingface.co/v1/models/{model_path}"
+        url = router_formats[0]  # Use first router format
     elif "router.huggingface.co" not in url:
         # If URL doesn't specify router API, use router
-        url = f"https://router.huggingface.co/v1/models/{model_path}"
+        url = router_formats[0]
     
-    # Ensure router URL has correct format
-    if "router.huggingface.co" in url and "/v1/models/" not in url:
-        # Add /v1/ if missing
-        if "/models/" in url:
-            model_part = url.split("/models/")[-1]
-            url = f"https://router.huggingface.co/v1/models/{model_part}"
+    # If URL is already router format, keep it but ensure correct format
+    if "router.huggingface.co" in url:
+        # Ensure it has /v1/models/ format
+        if "/hf-inference/v1/models/" not in url and "/v1/models/" not in url:
+            if "/models/" in url:
+                model_part = url.split("/models/")[-1]
+                url = f"https://router.huggingface.co/v1/models/{model_part}"
     
     print(f"🔍 Using Hugging Face Router API: {url}")
     
@@ -262,9 +273,35 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                 error_text = e.response.text[:500] if e.response.text else "No error text"
                 print(f"❌ HF API HTTP error for text {i+1}: {e.response.status_code}")
                 print(f"   Error response: {error_text}")
-                print(f"   This indicates a problem with the API call - NOT using fallback")
-                # Re-raise to trigger fallback to stub, not return safe/0.5
-                raise Exception(f"HF API HTTP {e.response.status_code}: {error_text}")
+                print(f"   URL tried: {url}")
+                
+                # If 404, try alternative Router API formats
+                if e.response.status_code == 404 and i == 0:  # Only try alternatives on first text
+                    print(f"🔄 404 error - trying alternative Router API formats...")
+                    model_path = url.split("/models/")[-1].split("/")[-1] if "/models/" in url else "bisharababish/arabert-toxic-classifier"
+                    alternative_urls = [
+                        f"https://router.huggingface.co/hf-inference/v1/models/{model_path}",
+                        f"https://huggingface.co/api/models/{model_path}",
+                    ]
+                    for alt_url in alternative_urls:
+                        print(f"🔄 Trying alternative URL: {alt_url}")
+                        try:
+                            alt_r = await client.post(alt_url, json={"inputs": text}, headers=headers)
+                            if alt_r.status_code == 200:
+                                print(f"✅ Alternative URL worked: {alt_url}")
+                                url = alt_url  # Update URL for remaining texts
+                                r = alt_r  # Use this response
+                                break
+                        except Exception as alt_e:
+                            print(f"❌ Alternative URL also failed: {alt_e}")
+                            continue
+                    else:
+                        # None of the alternatives worked
+                        print(f"❌ All Router API formats failed with 404")
+                        raise Exception(f"HF API HTTP {e.response.status_code}: {error_text}")
+                else:
+                    print(f"   This indicates a problem with the API call - NOT using fallback")
+                    raise Exception(f"HF API HTTP {e.response.status_code}: {error_text}")
             except Exception as e:
                 # Re-raise rate limit errors
                 if "rate limit" in str(e).lower() or "429" in str(e) or "Rate limited" in str(e):
