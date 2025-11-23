@@ -48,35 +48,15 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     
     print(f"🔍 Extracted model path: {model_path}")
     
-    # Inference API is DEPRECATED (returns 410 Gone)
-    # MUST use Router API - try multiple formats
-    # Format 1: https://router.huggingface.co/v1/models/{model_path}
-    # Format 2: https://router.huggingface.co/hf-inference/v1/models/{model_path}
-    # Format 3: https://huggingface.co/api/models/{model_path} (fallback)
+    # Use the URL as-is - don't try to convert it
+    # The user should set the correct URL in environment variables
+    # Options:
+    # 1. Hugging Face Space API: https://{username}-{space-name}.hf.space/api/predict
+    # 2. Inference Endpoint (if deployed): check Hugging Face dashboard
+    # 3. Router API: format varies, user should test and provide working URL
     
-    # Try different Router API formats
-    router_formats = [
-        f"https://router.huggingface.co/v1/models/{model_path}",
-        f"https://router.huggingface.co/hf-inference/v1/models/{model_path}",
-        f"https://api-inference.huggingface.co/models/{model_path}",  # Deprecated but might still work
-    ]
-    
-    if "api-inference.huggingface.co" in url:
-        print(f"🔄 Converting deprecated Inference API URL to Router API format")
-        url = router_formats[0]  # Use first router format
-    elif "router.huggingface.co" not in url:
-        # If URL doesn't specify router API, use router
-        url = router_formats[0]
-    
-    # If URL is already router format, keep it but ensure correct format
-    if "router.huggingface.co" in url:
-        # Ensure it has /v1/models/ format
-        if "/hf-inference/v1/models/" not in url and "/v1/models/" not in url:
-            if "/models/" in url:
-                model_part = url.split("/models/")[-1]
-                url = f"https://router.huggingface.co/v1/models/{model_part}"
-    
-    print(f"🔍 Using Hugging Face Router API: {url}")
+    print(f"🔍 Using URL as configured: {url}")
+    print(f"⚠️ If this fails, try deploying as Hugging Face Space and use Space API URL instead")
     
     # Prepare headers with optional authentication
     headers = {"Content-Type": "application/json"}
@@ -354,24 +334,9 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
     if not model_path:
         model_path = "bisharababish/arabert-toxic-classifier"
     
-    # Inference API is DEPRECATED (410 Gone) - MUST use Router API
-    # Router API format: https://router.huggingface.co/v1/models/{model_path}
-    if "api-inference.huggingface.co" in url:
-        print(f"🔄 Converting deprecated Inference API URL to Router API format")
-        url = f"https://router.huggingface.co/v1/models/{model_path}"
-    elif "router.huggingface.co" not in url:
-        # If URL doesn't specify router API, use router
-        url = f"https://router.huggingface.co/v1/models/{model_path}"
-    
-    # Ensure router URL has correct format
-    if "router.huggingface.co" in url and "/v1/models/" not in url:
-        # Add /v1/ if missing
-        if "/models/" in url:
-            model_part = url.split("/models/")[-1]
-            url = f"https://router.huggingface.co/v1/models/{model_part}"
-    
-    print(f"✅ Using Hugging Face Router API: {url}")
-    print(f"🔍 Original URL was: {settings.IBTIKAR_URL}")
+    # Use URL exactly as configured - no auto-conversion
+    # User should set a working URL format in IBTIKAR_URL environment variable
+    print(f"✅ Using URL as configured: {url}")
 
     # Check if it's Hugging Face API
     if _is_huggingface_api(url):
