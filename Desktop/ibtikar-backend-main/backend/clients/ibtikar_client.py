@@ -339,9 +339,9 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
     # Check if it's Hugging Face API
     if _is_huggingface_api(url):
         print(f"✅ Detected as Hugging Face API")
-            try:
-                # Use Router API URL (Inference API is deprecated)
-                results = await _call_huggingface_api(texts, url)
+        try:
+            # Use Router API URL (Inference API is deprecated)
+            results = await _call_huggingface_api(texts, url)
             print(f"📊 HF API returned {len(results)} results")
             
             # Log summary of results
