@@ -47,16 +47,7 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
         model_path = "bisharababish/arabert-toxic-classifier"
     
     print(f"🔍 Extracted model path: {model_path}")
-    
-    # Use the URL as-is - don't try to convert it
-    # The user should set the correct URL in environment variables
-    # Options:
-    # 1. Hugging Face Space API: https://{username}-{space-name}.hf.space/api/predict
-    # 2. Inference Endpoint (if deployed): check Hugging Face dashboard
-    # 3. Router API: format varies, user should test and provide working URL
-    
-    print(f"🔍 Using URL as configured: {url}")
-    print(f"⚠️ If this fails, try deploying as Hugging Face Space and use Space API URL instead")
+    print(f"🔍 Using URL: {url}")
     
     # Prepare headers with optional authentication
     headers = {"Content-Type": "application/json"}
@@ -76,13 +67,36 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
         for i, text in enumerate(texts):
             try:
                 print(f"🔍 Processing text {i+1}/{len(texts)}: {text[:50]}...")
-                # Hugging Face Router API expects single input
+                # Hugging Face Inference API expects single input
                 # Format: POST with {"inputs": text}
                 r = await client.post(
                     url,
                     json={"inputs": text},
                     headers=headers
                 )
+                
+                # Handle model loading (503) - wait and retry
+                if r.status_code == 503:
+                    wait_time = 20  # Wait 20 seconds for model to load
+                    print(f"⏳ Model is loading (503), waiting {wait_time}s before retry...")
+                    await asyncio.sleep(wait_time)
+                    # Retry once
+                    r = await client.post(
+                        url,
+                        json={"inputs": text},
+                        headers=headers
+                    )
+                
+                # Handle deprecated API (410) - try Router API as fallback
+                if r.status_code == 410:
+                    print(f"⚠️ Inference API is deprecated (410), trying Router API...")
+                    router_url = f"https://router.huggingface.co/v1/models/{model_path}"
+                    print(f"🔄 Trying Router API: {router_url}")
+                    r = await client.post(
+                        router_url,
+                        json={"inputs": text},
+                        headers=headers
+                    )
                 
                 # Handle rate limiting properly
                 if r.status_code == 429:
@@ -298,12 +312,12 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
     print(f"✅ IBTIKAR_URL is configured: {url}")
     
     # If URL is just a model path (like "Bisharababish/arabert-toxic-classifier"),
-    # convert it to Inference API URL (even though deprecated, it might still work)
+    # convert it to Inference API URL
     if not url.startswith("http") and "/" in url and not url.startswith("/"):
         print(f"🔄 Converting model path to Inference API URL")
         url = f"https://api-inference.huggingface.co/models/{url}"
         print(f"✅ Using Inference API URL: {url}")
-        print(f"⚠️  Note: Inference API is deprecated but may still work. If this fails, deploy a Space instead.")
+        print(f"ℹ️  Will automatically retry with Router API if Inference API is deprecated")
     else:
         print(f"✅ Using URL as configured: {url}")
 
