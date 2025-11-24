@@ -375,6 +375,27 @@ def oauth_debug():
         "env": settings.ENV,
     }
 
+@app.post("/v1/migrate/add-x-user-id")
+async def migrate_add_x_user_id():
+    """
+    One-time migration endpoint to add x_user_id column.
+    Call this once after deploying the new code.
+    Safe to call multiple times - won't duplicate the column.
+    """
+    from backend.db.migrate_add_x_user_id import migrate
+    try:
+        migrate()
+        return {
+            "success": True,
+            "message": "Migration completed successfully! x_user_id column added to x_tokens table."
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Migration failed. The column may already exist, or there was an error."
+        }
+
 @app.get("/v1/me/link-status")
 def link_status(user_id: int = 1, db: Session = Depends(get_db)):
     xt = db.query(models.XToken).filter(models.XToken.user_id == user_id).first()
