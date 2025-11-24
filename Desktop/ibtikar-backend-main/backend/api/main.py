@@ -420,6 +420,25 @@ def link_status(user_id: int = 1, db: Session = Depends(get_db)):
 async def x_me(user_id: int = Query(1), db: Session = Depends(get_db)):
     return await get_me(user_id, db)
 
+@app.delete("/v1/oauth/x/clear")
+async def clear_oauth_tokens(user_id: int = Query(1), db: Session = Depends(get_db)):
+    """
+    Clear OAuth tokens for a user. Use this to switch Twitter accounts.
+    After clearing, you'll need to OAuth again with the new account.
+    """
+    token = db.query(models.XToken).filter(models.XToken.user_id == user_id).first()
+    if token:
+        db.delete(token)
+        db.commit()
+        return {
+            "success": True,
+            "message": f"OAuth tokens cleared for user_id={user_id}. You can now OAuth with a different account."
+        }
+    return {
+        "success": True,
+        "message": f"No tokens found for user_id={user_id}. You can OAuth with any account."
+    }
+
 
 @app.get("/v1/x/my-posts")
 async def x_my_posts(
