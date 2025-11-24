@@ -384,16 +384,26 @@ async def migrate_add_x_user_id():
     """
     from backend.db.migrate_add_x_user_id import migrate
     try:
-        migrate()
+        result = migrate()
+        if result and result.get("already_exists"):
+            return {
+                "success": True,
+                "message": "Column x_user_id already exists. Migration not needed.",
+                "already_exists": True
+            }
         return {
             "success": True,
-            "message": "Migration completed successfully! x_user_id column added to x_tokens table."
+            "message": "Migration completed successfully! x_user_id column added to x_tokens table.",
+            "added": True
         }
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"❌ Migration endpoint error: {error_details}")
         return {
             "success": False,
             "error": str(e),
-            "message": "Migration failed. The column may already exist, or there was an error."
+            "message": "Migration failed. Check server logs for details."
         }
 
 @app.get("/v1/me/link-status")

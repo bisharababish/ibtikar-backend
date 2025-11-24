@@ -17,7 +17,7 @@ def migrate():
     print(f"📊 Database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
     
     try:
-        with engine.connect() as conn:
+        with engine.begin() as conn:  # Use begin() for automatic transaction management
             # Check if column already exists
             if "sqlite" in settings.DATABASE_URL.lower():
                 # SQLite
@@ -36,7 +36,7 @@ def migrate():
             
             if exists:
                 print("✅ Column x_user_id already exists. Migration not needed.")
-                return
+                return {"already_exists": True}
             
             # Add the column
             if "sqlite" in settings.DATABASE_URL.lower():
@@ -46,14 +46,21 @@ def migrate():
             else:
                 # PostgreSQL
                 conn.execute(text("ALTER TABLE x_tokens ADD COLUMN x_user_id VARCHAR(255)"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_x_tokens_x_user_id ON x_tokens(x_user_id)"))
+                try:
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_x_tokens_x_user_id ON x_tokens(x_user_id)"))
+                except Exception as idx_error:
+                    # Index might already exist, that's okay
+                    print(f"⚠️ Index creation note: {idx_error}")
                 print("✅ Added x_user_id column and index to x_tokens table (PostgreSQL)")
             
-            conn.commit()
+            # Transaction commits automatically with begin() context manager
             print("✅ Migration completed successfully!")
+            return {"success": True, "added": True}
             
     except Exception as e:
         print(f"❌ Migration failed: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 if __name__ == "__main__":
