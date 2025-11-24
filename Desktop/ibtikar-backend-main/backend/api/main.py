@@ -250,20 +250,30 @@ async def x_oauth_start(user_id: int = 1, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"⚠️ Could not ensure OAuthState table exists: {e}")
 
+    # ALWAYS clear existing tokens first to ensure fresh login
+    # This is critical for allowing account switching
+    existing_token = db.query(models.XToken).filter(models.XToken.user_id == user_id).first()
+    if existing_token:
+        print(f"🧹 Clearing existing tokens for user_id={user_id} to allow account switching")
+        db.delete(existing_token)
+        db.commit()
+    
     verifier, challenge = generate_pkce()
     state = new_state()
     # store BOTH verifier and user_id in database (not memory)
     # Increased TTL to 30 minutes to allow more time for user authorization
     print(f"🔐 Creating OAuth state: {state[:10]}... for user_id={user_id}")
     put_state(state, verifier, user_id, ttl_seconds=1800, db=db)
+    
     # ALWAYS force login - this ensures user can switch accounts every time
+    # force_login=true forces Twitter to show login screen every time
     twitter_auth_url = build_auth_url(state, challenge, force_login=True)
     
     print(f"🔗 Redirecting to Twitter OAuth with force_login=true")
-    print(f"   Full URL: {twitter_auth_url}")
+    print(f"   URL: {twitter_auth_url[:200]}...")
+    print(f"   ✅ Tokens cleared, force_login=true enabled - user can switch accounts")
     
     # Direct redirect - force_login=true should show login screen
-    # If user is already logged in, they'll see "Not you?" link to switch accounts
     return RedirectResponse(url=twitter_auth_url)
 
 
