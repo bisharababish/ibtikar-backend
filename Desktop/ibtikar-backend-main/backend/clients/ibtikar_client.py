@@ -30,10 +30,18 @@ def _is_huggingface_api(url: str) -> bool:
 
 
 async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
-    """Call Hugging Face Inference API for each text."""
+    """Call Hugging Face Inference API or Space API for each text."""
     results = []
     
-    # Extract model path from various URL formats
+    # Check if this is a Space API URL (hf.space)
+    is_space_api = "hf.space" in url
+    
+    # For Space API, ensure we have the /api/predict endpoint
+    if is_space_api and "/api/predict" not in url:
+        url = url.rstrip("/") + "/api/predict"
+        print(f"🔄 Updated Space API URL to: {url}")
+    
+    # Extract model path from various URL formats (for fallback to Router API)
     model_path = None
     if "/models/" in url:
         model_path = url.split("/models/")[-1].rstrip("/")
@@ -41,6 +49,10 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
         model_path = url.split("/v1/models/")[-1].rstrip("/")
     elif "api-inference.huggingface.co" in url:
         model_path = url.split("models/")[-1] if "models/" in url else url.split("/")[-1]
+    elif is_space_api:
+        # Extract model name from Space URL (e.g., bisharababish-arabert-toxic-classifier)
+        # This is just for logging, not used for Router API fallback
+        model_path = url.split("hf.space")[0].split("//")[-1].split(".")[0]
     
     if not model_path:
         print(f"⚠️ Could not extract model path from URL: {url}")
@@ -48,16 +60,21 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     
     print(f"🔍 Extracted model path: {model_path}")
     print(f"🔍 Using URL: {url}")
+    print(f"🔍 Is Space API: {is_space_api}")
     
     # Prepare headers with optional authentication
     headers = {"Content-Type": "application/json"}
-    if settings.HF_TOKEN:
+    # Public Gradio Spaces usually don't need authentication
+    # Only add token for Inference API/Router API, not for Space API
+    if settings.HF_TOKEN and not is_space_api:
         # Validate token format (should start with hf_)
         if not settings.HF_TOKEN.startswith("hf_"):
             print(f"⚠️ WARNING: HF_TOKEN doesn't start with 'hf_' - might be invalid")
             print(f"   Token value: {settings.HF_TOKEN[:10]}...")
         headers["Authorization"] = f"Bearer {settings.HF_TOKEN}"
         print(f"🔑 Using HF_TOKEN for authentication (token length: {len(settings.HF_TOKEN)}, starts with: {settings.HF_TOKEN[:3]}...)")
+    elif is_space_api:
+        print("ℹ️  Space API detected - using without authentication (public Spaces don't need auth)")
     else:
         print("⚠️ No HF_TOKEN configured - trying without authentication")
         print("   Note: Router API may require authentication even for public models")
@@ -67,11 +84,18 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
         for i, text in enumerate(texts):
             try:
                 print(f"🔍 Processing text {i+1}/{len(texts)}: {text[:50]}...")
-                # Hugging Face Inference API expects single input
-                # Format: POST with {"inputs": text}
+                
+                # Different request formats for different APIs
+                if is_space_api:
+                    # Space API (Gradio) expects: {"data": [text]} for function with single text input
+                    request_data = {"data": [text]}
+                else:
+                    # Hugging Face Inference API expects: {"inputs": text}
+                    request_data = {"inputs": text}
+                
                 r = await client.post(
                     url,
-                    json={"inputs": text},
+                    json=request_data,
                     headers=headers
                 )
                 
@@ -81,20 +105,21 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                     print(f"⏳ Model is loading (503), waiting {wait_time}s before retry...")
                     await asyncio.sleep(wait_time)
                     # Retry once
+                    request_data = {"data": [text]} if is_space_api else {"inputs": text}
                     r = await client.post(
                         url,
-                        json={"inputs": text},
+                        json=request_data,
                         headers=headers
                     )
                 
-                # Handle 404 or 410 - try Router API as fallback (only on first text to avoid multiple attempts)
-                if (r.status_code == 404 or r.status_code == 410) and i == 0:
+                # Handle 404 or 410 - try Router API as fallback (only for Inference API, not Space API)
+                if (r.status_code == 404 or r.status_code == 410) and i == 0 and not is_space_api:
                     print(f"⚠️ Inference API returned {r.status_code}, trying Router API...")
                     router_url = f"https://router.huggingface.co/v1/models/{model_path}"
                     print(f"🔄 Trying Router API: {router_url}")
                     router_r = await client.post(
                         router_url,
-                        json={"inputs": text},
+                        json={"inputs": text},  # Router API uses Inference API format
                         headers=headers
                     )
                     # If Router API works, use it for all remaining texts
@@ -124,6 +149,20 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         print(f"   Error: {error_msg}")
                         # Raise error with both attempts
                         raise Exception(f"Inference API ({r.status_code}) and Router API ({router_r.status_code}) both failed. Router error: {error_msg}")
+                
+                # For Space API, handle errors directly without Router API fallback
+                if is_space_api and r.status_code != 200:
+                    error_text = r.text[:500] if r.text else "No error text"
+                    print(f"❌ Space API returned {r.status_code}")
+                    print(f"   URL: {url}")
+                    print(f"   Request data: {request_data}")
+                    print(f"   Response: {error_text}")
+                    print(f"   Headers: {dict(r.headers)}")
+                    raise Exception(
+                        f"Space API returned {r.status_code}: {error_text}. "
+                        f"URL: {url}. "
+                        f"Check if the Space is running and accessible."
+                    )
                 
                 # If still 404/410 after Router API attempt, provide helpful error
                 if (r.status_code == 404 or r.status_code == 410):
@@ -175,9 +214,10 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                     await asyncio.sleep(wait_seconds)
                     
                     # Try once more after waiting
+                    request_data = {"data": [text]} if is_space_api else {"inputs": text}
                     r = await client.post(
                         url,
-                        json={"inputs": text},
+                        json=request_data,
                         headers=headers
                     )
                     
@@ -196,11 +236,21 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                 print(f"📋 HF API response for text {i+1}: {str(data)[:200]}")
                 print(f"📋 Response type: {type(data)}")
                 
+                # Handle Gradio Space API response format
+                # Gradio returns: {"data": [result]} where result is what the function returns
+                if is_space_api and isinstance(data, dict) and "data" in data:
+                    data = data["data"]
+                    if isinstance(data, list) and len(data) > 0:
+                        data = data[0]  # Get the actual result
+                    if i == 0:
+                        print(f"📋 Unwrapped Gradio response: {data}")
+                
                 # Handle different response formats from HF API
                 # HF classification models can return:
                 # - List of lists: [[{"label": "LABEL_0", "score": 0.95}, {"label": "LABEL_1", "score": 0.05}]]
                 # - List of dicts: [{"label": "LABEL_0", "score": 0.95}, {"label": "LABEL_1", "score": 0.05}]
                 # - Single dict: {"label": "LABEL_1", "score": 0.65}
+                # Space API (already mapped): [{"label": "harmful", "score": 0.95}] or {"label": "harmful", "score": 0.95}
                 
                 label_mapped = "unknown"
                 score = 0.5
@@ -216,6 +266,24 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                     
                     # Now process the actual list of label dicts
                     if isinstance(data, list) and len(data) > 0:
+                        # Handle two formats:
+                        # 1. HF Inference API: [{"label": "LABEL_0", "score": 0.95}, {"label": "LABEL_1", "score": 0.05}]
+                        # 2. Space API (already mapped): [{"label": "harmful", "score": 0.95}] or [{"label": "safe", "score": 0.95}]
+                        
+                        # Check if response is already in mapped format (harmful/safe)
+                        first_item = data[0] if isinstance(data[0], dict) else None
+                        if first_item:
+                            label_str = str(first_item.get("label", "")).lower()
+                            # If it's already "harmful" or "safe", use it directly
+                            if label_str in ["harmful", "safe", "unknown"]:
+                                score = float(first_item.get("score", 0.5))
+                                label_mapped = label_str
+                                if i == 0:
+                                    print(f"✅ Space API format (already mapped): {label_mapped} (score={score:.4f})")
+                                results.append({"label": label_mapped, "score": float(score)})
+                                continue
+                        
+                        # Otherwise, handle HF Inference API format (LABEL_0/LABEL_1)
                         # Find LABEL_0 (safe) and LABEL_1 (toxic/harmful)
                         label_0_item = None
                         label_1_item = None
@@ -273,10 +341,18 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         results.append({"label": label_mapped, "score": float(score)})
                     
                     elif isinstance(data, dict):
-                        # Single dict response
-                        label = str(data.get("label", "")).upper()
+                        # Single dict response - could be HF API or Space API format
+                        label = str(data.get("label", "")).lower()
                         score = float(data.get("score", 0.5))
-                        label_mapped = "harmful" if ("LABEL_1" in label or "TOXIC" in label or "1" in label) else "safe"
+                        
+                        # Check if already mapped (harmful/safe) or needs mapping (LABEL_0/LABEL_1)
+                        if label in ["harmful", "safe", "unknown"]:
+                            label_mapped = label
+                        else:
+                            # Map from LABEL format
+                            label_upper = label.upper()
+                            label_mapped = "harmful" if ("LABEL_1" in label_upper or "TOXIC" in label_upper or "1" in label_upper) else "safe"
+                        
                         if i == 0:
                             print(f"✅ Single dict format: {label_mapped} (score={score:.4f})")
                         results.append({"label": label_mapped, "score": float(score)})
@@ -322,7 +398,7 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                             # If 503, wait and retry
                             if router_r.status_code == 503:
                                 await asyncio.sleep(20)
-                                router_r = await client.post(router_url, json={"inputs": text}, headers=headers)
+                                router_r = await client.post(router_url, json={"inputs": text}, headers=headers)  # Router API format
                             r = router_r
                             # Continue processing this text
                             continue
