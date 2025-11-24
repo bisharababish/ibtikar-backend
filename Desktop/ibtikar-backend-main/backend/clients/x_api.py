@@ -112,9 +112,20 @@ async def get_my_recent_tweets(user_id: int, db: Session, max_results: int = 20)
     from backend.db.models import XToken
     token_row = db.query(XToken).filter(XToken.user_id == user_id).first()
     
-    if token_row and token_row.x_user_id:
+    # Check if column exists (for graceful migration)
+    has_x_user_id = False
+    cached_uid = None
+    if token_row:
+        try:
+            cached_uid = getattr(token_row, 'x_user_id', None)
+            has_x_user_id = True
+        except AttributeError:
+            # Column doesn't exist yet - migration not run
+            has_x_user_id = False
+    
+    if token_row and cached_uid:
         # Use cached Twitter user ID - no need to call get_me
-        uid = token_row.x_user_id
+        uid = cached_uid
         print(f"✅ Using cached Twitter user ID: {uid} (avoiding get_me API call)")
     else:
         # No cached ID - need to call get_me (but only once)
@@ -124,11 +135,14 @@ async def get_my_recent_tweets(user_id: int, db: Session, max_results: int = 20)
             return me  # Return rate limit info
         uid = me["data"]["id"]
         
-        # Cache it for next time
-        if token_row:
-            token_row.x_user_id = uid
-            db.commit()
-            print(f"✅ Cached Twitter user ID: {uid}")
+        # Cache it for next time (if column exists)
+        if token_row and has_x_user_id:
+            try:
+                token_row.x_user_id = uid
+                db.commit()
+                print(f"✅ Cached Twitter user ID: {uid}")
+            except Exception as e:
+                print(f"⚠️ Could not cache Twitter user ID (column may not exist): {e}")
     
     access, _, _ = _get_token_pair(user_id, db)
     async with _client(access) as c:
@@ -153,9 +167,20 @@ async def get_following_feed(user_id: int, db: Session, authors_limit: int = 25,
     from backend.db.models import XToken
     token_row = db.query(XToken).filter(XToken.user_id == user_id).first()
     
-    if token_row and token_row.x_user_id:
+    # Check if column exists (for graceful migration)
+    has_x_user_id = False
+    cached_uid = None
+    if token_row:
+        try:
+            cached_uid = getattr(token_row, 'x_user_id', None)
+            has_x_user_id = True
+        except AttributeError:
+            # Column doesn't exist yet - migration not run
+            has_x_user_id = False
+    
+    if token_row and cached_uid:
         # Use cached Twitter user ID - no need to call get_me
-        uid = token_row.x_user_id
+        uid = cached_uid
         print(f"✅ Using cached Twitter user ID: {uid} (avoiding get_me API call)")
     else:
         # No cached ID - need to call get_me (but only once)
@@ -165,11 +190,14 @@ async def get_following_feed(user_id: int, db: Session, authors_limit: int = 25,
             return me  # Return rate limit info from get_me
         uid = me["data"]["id"]
         
-        # Cache it for next time
-        if token_row:
-            token_row.x_user_id = uid
-            db.commit()
-            print(f"✅ Cached Twitter user ID: {uid}")
+        # Cache it for next time (if column exists)
+        if token_row and has_x_user_id:
+            try:
+                token_row.x_user_id = uid
+                db.commit()
+                print(f"✅ Cached Twitter user ID: {uid}")
+            except Exception as e:
+                print(f"⚠️ Could not cache Twitter user ID (column may not exist): {e}")
     
     access, _, _ = _get_token_pair(user_id, db)
 
