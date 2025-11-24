@@ -19,7 +19,15 @@ def _normalize_redirect_uri(uri: str) -> str:
     uri = str(uri).rstrip("/")
     return uri
 
-def build_auth_url(state: str, code_challenge: str) -> str:
+def build_auth_url(state: str, code_challenge: str, force_login: bool = True) -> str:
+    """
+    Build Twitter OAuth authorization URL.
+    
+    Args:
+        state: OAuth state parameter
+        code_challenge: PKCE code challenge
+        force_login: If True, forces user to re-enter credentials (allows account switching)
+    """
     redirect_uri = _normalize_redirect_uri(settings.X_REDIRECT_URI)
     params = {
         "response_type": "code",
@@ -30,6 +38,10 @@ def build_auth_url(state: str, code_challenge: str) -> str:
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
     }
+    # Add force_login to allow account switching
+    if force_login:
+        params["force_login"] = "true"
+    
     qp = httpx.QueryParams(params)
     return f"{AUTH_URL}?{qp}"
 
