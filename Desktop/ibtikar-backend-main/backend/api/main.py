@@ -256,7 +256,8 @@ async def x_oauth_start(user_id: int = 1, db: Session = Depends(get_db)):
     # Increased TTL to 30 minutes to allow more time for user authorization
     print(f"🔐 Creating OAuth state: {state[:10]}... for user_id={user_id}")
     put_state(state, verifier, user_id, ttl_seconds=1800, db=db)
-    twitter_auth_url = build_auth_url(state, challenge)
+    twitter_auth_url = build_auth_url(state, challenge, force_login=True)
+    print(f"🔗 OAuth URL (with force_login=true): {twitter_auth_url[:100]}...")
     
     # Direct redirect to Twitter - this should work better than HTML page
     return RedirectResponse(url=twitter_auth_url)
