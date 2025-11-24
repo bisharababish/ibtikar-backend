@@ -48,12 +48,13 @@ def build_auth_url(state: str, code_challenge: str, force_login: bool = True) ->
     # Add unique timestamp to prevent any URL caching
     import time
     import random
-    params["_t"] = str(int(time.time() * 1000)) + str(random.randint(1000, 9999))
+    cache_bust = str(int(time.time() * 1000)) + str(random.randint(1000, 9999))
+    params["_t"] = cache_bust
     
     qp = httpx.QueryParams(params)
     auth_url = f"{AUTH_URL}?{qp}"
     print(f"🔗 Built OAuth URL with force_login=true: {auth_url}")
-    print(f"   Parameters: force_login=true, cache_bust={params['_']}")
+    print(f"   Parameters: force_login=true, cache_bust={cache_bust}")
     return auth_url
 
 async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, Any]:
