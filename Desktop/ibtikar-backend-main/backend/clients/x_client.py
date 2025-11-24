@@ -40,13 +40,15 @@ def build_auth_url(state: str, code_challenge: str, force_login: bool = True) ->
         "code_challenge_method": "S256",
     }
     
-    # ALWAYS force login screen - this is critical for account switching
-    # force_login=true forces Twitter to show login screen every time
+    # CRITICAL: Force login screen every time to allow account switching
+    # Twitter OAuth 2.0: force_login parameter forces login screen
+    # This is ESSENTIAL for allowing users to switch accounts
     params["force_login"] = "true"
     
-    # Add cache-busting parameter to prevent browser from using cached session
+    # Add unique timestamp to prevent any URL caching
     import time
-    params["_"] = str(int(time.time() * 1000))  # Timestamp to bust cache
+    import random
+    params["_t"] = str(int(time.time() * 1000)) + str(random.randint(1000, 9999))
     
     qp = httpx.QueryParams(params)
     auth_url = f"{AUTH_URL}?{qp}"

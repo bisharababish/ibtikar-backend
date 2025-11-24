@@ -2,7 +2,7 @@ from datetime import datetime
 import time
 
 from fastapi import FastAPI, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse, HTMLResponse
+from fastapi.responses import RedirectResponse, HTMLResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 
@@ -259,8 +259,11 @@ async def x_oauth_start(user_id: int = 1, db: Session = Depends(get_db)):
     # ALWAYS force login - this ensures user can switch accounts every time
     twitter_auth_url = build_auth_url(state, challenge, force_login=True)
     
-    # Direct redirect to Twitter - this should work better than HTML page
-    # force_login=true will force Twitter to show login screen every time
+    print(f"🔗 Redirecting to Twitter OAuth with force_login=true")
+    print(f"   Full URL: {twitter_auth_url}")
+    
+    # Direct redirect - force_login=true should show login screen
+    # If user is already logged in, they'll see "Not you?" link to switch accounts
     return RedirectResponse(url=twitter_auth_url)
 
 
