@@ -53,6 +53,9 @@ class XToken(Base):
     scope = Column(String, nullable=True)
     token_type = Column(String, nullable=True)
     expires_in = Column(Integer, nullable=True)
+    
+    # Cache the Twitter user ID to avoid calling get_me every time
+    x_user_id = Column(String, nullable=True, index=True)  # Twitter user ID (e.g., "1234567890")
 
     created_at = Column(DateTime, default=datetime.utcnow)
 

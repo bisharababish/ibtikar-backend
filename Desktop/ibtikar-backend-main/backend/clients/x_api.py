@@ -108,10 +108,28 @@ async def get_me(user_id: int, db: Session) -> Dict[str, Any]:
     return r.json()
 
 async def get_my_recent_tweets(user_id: int, db: Session, max_results: int = 20) -> Dict[str, Any]:
-    me = await get_me(user_id, db)
-    if isinstance(me, dict) and me.get("rate_limited"):
-        return me  # Return rate limit info
-    uid = me["data"]["id"]
+    # Check if we have cached Twitter user ID to avoid rate limit
+    from backend.db.models import XToken
+    token_row = db.query(XToken).filter(XToken.user_id == user_id).first()
+    
+    if token_row and token_row.x_user_id:
+        # Use cached Twitter user ID - no need to call get_me
+        uid = token_row.x_user_id
+        print(f"✅ Using cached Twitter user ID: {uid} (avoiding get_me API call)")
+    else:
+        # No cached ID - need to call get_me (but only once)
+        print(f"⚠️ No cached Twitter user ID, calling get_me (this may hit rate limit)")
+        me = await get_me(user_id, db)
+        if isinstance(me, dict) and me.get("rate_limited"):
+            return me  # Return rate limit info
+        uid = me["data"]["id"]
+        
+        # Cache it for next time
+        if token_row:
+            token_row.x_user_id = uid
+            db.commit()
+            print(f"✅ Cached Twitter user ID: {uid}")
+    
     access, _, _ = _get_token_pair(user_id, db)
     async with _client(access) as c:
         r = await c.get(
@@ -129,11 +147,30 @@ async def get_following_feed(user_id: int, db: Session, authors_limit: int = 25,
     """
     Free-tier friendly fallback: own tweets + mentions.
     Returns {"data": [...]} or {"rate_limited": True, ...} when 429.
+    Uses cached Twitter user ID to avoid calling get_me every time.
     """
-    me = await get_me(user_id, db)
-    if isinstance(me, dict) and me.get("rate_limited"):
-        return me  # Return rate limit info from get_me
-    uid = me["data"]["id"]
+    # Check if we have cached Twitter user ID to avoid rate limit
+    from backend.db.models import XToken
+    token_row = db.query(XToken).filter(XToken.user_id == user_id).first()
+    
+    if token_row and token_row.x_user_id:
+        # Use cached Twitter user ID - no need to call get_me
+        uid = token_row.x_user_id
+        print(f"✅ Using cached Twitter user ID: {uid} (avoiding get_me API call)")
+    else:
+        # No cached ID - need to call get_me (but only once)
+        print(f"⚠️ No cached Twitter user ID, calling get_me (this may hit rate limit)")
+        me = await get_me(user_id, db)
+        if isinstance(me, dict) and me.get("rate_limited"):
+            return me  # Return rate limit info from get_me
+        uid = me["data"]["id"]
+        
+        # Cache it for next time
+        if token_row:
+            token_row.x_user_id = uid
+            db.commit()
+            print(f"✅ Cached Twitter user ID: {uid}")
+    
     access, _, _ = _get_token_pair(user_id, db)
 
     async with _client(access) as c:

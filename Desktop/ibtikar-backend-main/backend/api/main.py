@@ -331,6 +331,8 @@ async def x_oauth_callback(
                 expires_in=token.get("expires_in"),
             )
         )
+        db.commit()  # Commit to get the ID
+        existing = db.query(models.XToken).filter(models.XToken.user_id == user_id).first()
     else:
         existing.access_token = enc(token.get("access_token", ""))
         existing.refresh_token = (
@@ -341,6 +343,19 @@ async def x_oauth_callback(
         existing.scope = token.get("scope")
         existing.token_type = token.get("token_type")
         existing.expires_in = token.get("expires_in")
+
+    # Fetch and cache Twitter user ID to avoid rate limits
+    if not existing.x_user_id:
+        try:
+            print(f"📥 Fetching Twitter user ID to cache...")
+            me = await get_me(user_id, db)
+            if isinstance(me, dict) and not me.get("rate_limited") and me.get("data"):
+                existing.x_user_id = me["data"]["id"]
+                print(f"✅ Cached Twitter user ID: {existing.x_user_id}")
+            else:
+                print(f"⚠️ Could not fetch Twitter user ID (rate limited or error)")
+        except Exception as e:
+            print(f"⚠️ Error fetching Twitter user ID: {e} (will fetch on first use)")
 
     db.commit()
     
