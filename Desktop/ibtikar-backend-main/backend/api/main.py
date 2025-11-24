@@ -420,6 +420,7 @@ def link_status(user_id: int = 1, db: Session = Depends(get_db)):
 async def x_me(user_id: int = Query(1), db: Session = Depends(get_db)):
     return await get_me(user_id, db)
 
+@app.get("/v1/oauth/x/clear")
 @app.delete("/v1/oauth/x/clear")
 async def clear_oauth_tokens(user_id: int = Query(1), db: Session = Depends(get_db)):
     """
