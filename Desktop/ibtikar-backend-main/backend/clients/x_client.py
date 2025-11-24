@@ -22,6 +22,7 @@ def _normalize_redirect_uri(uri: str) -> str:
 def build_auth_url(state: str, code_challenge: str, force_login: bool = True) -> str:
     """
     Build Twitter OAuth authorization URL.
+    ALWAYS forces login screen to allow account switching.
     
     Args:
         state: OAuth state parameter
@@ -38,17 +39,19 @@ def build_auth_url(state: str, code_challenge: str, force_login: bool = True) ->
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
     }
-    # Add force_login to allow account switching
-    # This forces Twitter to show the login screen even if user is already logged in
-    if force_login:
-        params["force_login"] = "true"
-        # Also try to clear any cached session by adding prompt parameter
-        # Twitter OAuth 2.0 might cache sessions, so we force a fresh login
-        params["prompt"] = "login"  # Forces login screen
+    
+    # ALWAYS force login screen - this is critical for account switching
+    # force_login=true forces Twitter to show login screen every time
+    params["force_login"] = "true"
+    
+    # Add cache-busting parameter to prevent browser from using cached session
+    import time
+    params["_"] = str(int(time.time() * 1000))  # Timestamp to bust cache
     
     qp = httpx.QueryParams(params)
     auth_url = f"{AUTH_URL}?{qp}"
-    print(f"🔗 Built OAuth URL with force_login: {auth_url[:150]}...")
+    print(f"🔗 Built OAuth URL with force_login=true: {auth_url}")
+    print(f"   Parameters: force_login=true, cache_bust={params['_']}")
     return auth_url
 
 async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, Any]:
