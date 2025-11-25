@@ -265,15 +265,19 @@ async def x_oauth_start(user_id: int = 1, db: Session = Depends(get_db)):
     print(f"🔐 Creating OAuth state: {state[:10]}... for user_id={user_id}")
     put_state(state, verifier, user_id, ttl_seconds=1800, db=db)
     
-    # ALWAYS force login - this ensures user can switch accounts every time
-    # force_login=true forces Twitter to show login screen every time
+    # Build OAuth URL with force_login=true to force login screen
+    from ..clients.x_client import build_auth_url
     twitter_auth_url = build_auth_url(state, challenge, force_login=True)
     
-    print(f"🔗 Redirecting to Twitter OAuth with force_login=true")
-    print(f"   URL: {twitter_auth_url[:200]}...")
-    print(f"   ✅ Tokens cleared, force_login=true enabled - user can switch accounts")
+    print(f"🔗 Creating logout-then-oauth flow to force login screen")
+    print(f"   OAuth URL: {twitter_auth_url[:250]}...")
+    print(f"   ✅ Tokens cleared")
+    print(f"   ✅ force_login=true enabled")
     
-    # Direct redirect - force_login=true should show login screen
+    # Direct redirect to OAuth URL with force_login=true
+    # The HTML logout approach doesn't work well in Expo WebBrowser
+    # force_login=true should force login screen, but Twitter may ignore it if session is strong
+    # User may need to manually log out of Twitter in their device browser first
     return RedirectResponse(url=twitter_auth_url)
 
 

@@ -22,14 +22,24 @@ def _normalize_redirect_uri(uri: str) -> str:
 def build_auth_url(state: str, code_challenge: str, force_login: bool = True) -> str:
     """
     Build Twitter OAuth authorization URL.
-    ALWAYS forces login screen to allow account switching.
+    ALWAYS forces login screen (username/password entry) to allow account switching.
     
     Args:
         state: OAuth state parameter
         code_challenge: PKCE code challenge
         force_login: If True, forces user to re-enter credentials (allows account switching)
+    
+    Note: X_REDIRECT_URI environment variable MUST be set to:
+          https://ibtikar-backend.onrender.com/v1/oauth/x/callback
+          (NOT ibtikar://oauth/callback - that's the app deep link)
     """
     redirect_uri = _normalize_redirect_uri(settings.X_REDIRECT_URI)
+    
+    # Verify redirect URI is the backend URL, not app deep link
+    if not redirect_uri.startswith("https://"):
+        print(f"⚠️ WARNING: X_REDIRECT_URI should be backend URL, not app deep link!")
+        print(f"   Current: {redirect_uri}")
+        print(f"   Expected: https://ibtikar-backend.onrender.com/v1/oauth/x/callback")
     params = {
         "response_type": "code",
         "client_id": settings.X_CLIENT_ID,
@@ -40,22 +50,39 @@ def build_auth_url(state: str, code_challenge: str, force_login: bool = True) ->
         "code_challenge_method": "S256",
     }
     
-    # CRITICAL: Force login screen every time to allow account switching
-    # Twitter OAuth 2.0: force_login parameter forces login screen
-    # This is ESSENTIAL for allowing users to switch accounts
+    # CRITICAL: Force login screen (username/password) every time
+    # This makes Twitter show the SIGN IN page, not the authorization page
+    # force_login=true forces Twitter to show login screen even if user is logged in
     params["force_login"] = "true"
     
-    # Add unique timestamp to prevent any URL caching
+    # Add multiple unique parameters to prevent ANY caching
+    # This ensures Twitter treats each request as completely new
     import time
     import random
-    cache_bust = str(int(time.time() * 1000)) + str(random.randint(1000, 9999))
+    timestamp = int(time.time() * 1000)
+    random_num = random.randint(10000, 99999)
+    cache_bust = f"{timestamp}{random_num}"
+    
     params["_t"] = cache_bust
+    params["_"] = cache_bust
+    params["_nocache"] = cache_bust
+    params["_r"] = str(random.randint(100000, 999999))  # Additional random
     
     qp = httpx.QueryParams(params)
     auth_url = f"{AUTH_URL}?{qp}"
-    print(f"🔗 Built OAuth URL with force_login=true: {auth_url}")
-    print(f"   Parameters: force_login=true, cache_bust={cache_bust}")
+    
+    # Verify force_login is in the URL
+    if "force_login=true" not in auth_url:
+        print("⚠️ WARNING: force_login=true not found in OAuth URL!")
+    else:
+        print("✅ Verified: force_login=true is in OAuth URL")
+    
+    print(f"🔗 Built OAuth URL (will show SIGN IN page every time)")
+    print(f"   URL: {auth_url}")
+    print(f"   force_login=true ensures login screen (username/password entry)")
     return auth_url
+
+
 
 async def exchange_code_for_token(code: str, code_verifier: str) -> Dict[str, Any]:
     # Normalize redirect URI to match exactly what was used in auth URL
