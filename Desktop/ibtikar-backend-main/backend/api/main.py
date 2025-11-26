@@ -301,8 +301,22 @@ async def x_oauth_callback(
         return RedirectResponse(url=app_redirect_url)
     
     if not code or not state:
-        print(f"❌ OAuth callback missing parameters: code={code is not None}, state={state is not None}")
-        raise HTTPException(status_code=400, detail="Missing code/state")
+        # This is normal - could be direct access, health check, or bot
+        # Only log as warning if we have a referer (suggesting it might be from OAuth flow)
+        referer = request.headers.get("referer", "") if request else ""
+        if referer and "twitter.com" in referer:
+            print(f"⚠️ OAuth callback missing parameters (from Twitter): code={code is not None}, state={state is not None}")
+            print(f"   Referer: {referer}")
+            raise HTTPException(status_code=400, detail="Missing code/state. Please try the OAuth flow again.")
+        else:
+            # Direct access or health check - not an error
+            print(f"ℹ️ Callback endpoint accessed directly (no OAuth params): code={code is not None}, state={state is not None}")
+            if request:
+                print(f"   User-Agent: {request.headers.get('user-agent', 'Unknown')[:50]}")
+            return HTMLResponse(
+                content="<html><body><h1>OAuth Callback Endpoint</h1><p>This endpoint is used for Twitter OAuth callbacks. Please initiate login through the app.</p></body></html>",
+                status_code=200
+            )
 
     state_data = pop_state(state, db=db)
     if not state_data:
