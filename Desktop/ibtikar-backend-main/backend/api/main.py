@@ -1,7 +1,7 @@
 from datetime import datetime
 import time
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, HTMLResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
@@ -288,6 +288,7 @@ async def x_oauth_callback(
     error: str | None = None,
     error_description: str | None = None,
     db: Session = Depends(get_db),
+    request: Request = None,
 ):
     # Handle OAuth errors from Twitter
     if error:
@@ -377,10 +378,40 @@ async def x_oauth_callback(
             print(f"⚠️ Error fetching Twitter user ID: {e} (will fetch on first use)")
 
     db.commit()
+    print("✅ Database updated successfully")
     
-    # Redirect back to the Expo app using deep linking
+    # Check if this is a web request (by checking Referer or User-Agent)
+    is_web_request = False
+    if request:
+        referer = request.headers.get("referer", "")
+        user_agent = request.headers.get("user-agent", "").lower()
+        # Check if referer is a web URL or user-agent indicates browser
+        if referer and ("http://" in referer or "https://" in referer):
+            is_web_request = True
+            print(f"🌐 Web request detected (Referer: {referer})")
+        elif "mozilla" in user_agent or "chrome" in user_agent or "safari" in user_agent:
+            is_web_request = True
+            print(f"🌐 Web request detected (User-Agent: {user_agent[:50]}...)")
+    
+    # For web requests, redirect directly to the web URL with callback params
+    if is_web_request:
+        # Try to get the origin from Referer, or use a default
+        web_origin = "http://localhost:8081"  # Default for local dev
+        if request and request.headers.get("referer"):
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(request.headers.get("referer"))
+                web_origin = f"{parsed.scheme}://{parsed.netloc}"
+            except:
+                pass
+        web_redirect_url = f"{web_origin}?success=true&user_id={user_id}"
+        print(f"🔀 Redirecting to web app: {web_redirect_url}")
+        return RedirectResponse(url=web_redirect_url)
+    
+    # For mobile, redirect back to the Expo app using deep linking
     # The app scheme is "ibtikar" as defined in app.json
     app_redirect_url = f"ibtikar://oauth/callback?success=true&user_id={user_id}"
+    print(f"🔀 Redirecting to mobile app: {app_redirect_url}")
     return RedirectResponse(url=app_redirect_url)
 
 
