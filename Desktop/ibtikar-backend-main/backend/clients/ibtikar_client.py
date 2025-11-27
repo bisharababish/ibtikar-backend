@@ -218,8 +218,9 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         # Raise error with both attempts
                         raise Exception(f"Inference API ({r.status_code}) and Router API ({router_r.status_code}) both failed. Router error: {error_msg}")
                 
-                # For Space API, handle errors directly without Router API fallback
-                if is_space_api and r.status_code != 200:
+                # For Space API, handle errors - but skip if 404/410 (already handled with fallback above)
+                # Only raise for other error codes
+                if is_space_api and r.status_code != 200 and r.status_code != 404 and r.status_code != 410:
                     error_text = r.text[:500] if r.text else "No error text"
                     print(f"❌ Space API returned {r.status_code}")
                     print(f"   URL: {url}")
