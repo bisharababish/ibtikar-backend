@@ -278,11 +278,65 @@ async def x_oauth_start(user_id: int = 1, db: Session = Depends(get_db)):
     print(f"   ✅ force_login=true enabled")
     print(f"   ✅ prompt=login enabled")
     
-    # Direct redirect to OAuth URL with force_login=true
-    # The HTML logout approach doesn't work well in Expo WebBrowser
-    # force_login=true should force login screen, but Twitter may ignore it if session is strong
-    # User may need to manually log out of Twitter in their device browser first
-    return RedirectResponse(url=twitter_auth_url)
+    # Create an HTML page that redirects to Twitter logout first, then to OAuth
+    # This ensures we start with a clean Twitter session and can choose a different account
+    # The page uses meta refresh to chain redirects: logout -> OAuth
+    logout_then_oauth_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="refresh" content="2;url=https://twitter.com/logout?redirect_uri={twitter_auth_url.replace('&', '%26').replace('?', '%3F')}">
+        <title>Switching Twitter Account...</title>
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+                background: #000;
+                color: white;
+            }}
+            .container {{
+                text-align: center;
+                padding: 40px;
+            }}
+            .spinner {{
+                border: 4px solid #333;
+                border-top: 4px solid #1DA1F2;
+                border-radius: 50%;
+                width: 50px;
+                height: 50px;
+                animation: spin 1s linear infinite;
+                margin: 20px auto;
+            }}
+            @keyframes spin {{
+                0% {{ transform: rotate(0deg); }}
+                100% {{ transform: rotate(360deg); }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Switching Twitter Account...</h1>
+            <div class="spinner"></div>
+            <p>Preparing to log out of current Twitter session...</p>
+            <p style="font-size: 12px; opacity: 0.7;">You'll be able to choose a different account</p>
+        </div>
+        <script>
+            // Immediate redirect to Twitter logout, which will then redirect to OAuth
+            // Twitter logout accepts a redirect_uri parameter
+            const logoutUrl = 'https://twitter.com/logout?redirect_uri=' + encodeURIComponent('{twitter_auth_url}');
+            console.log('Redirecting to Twitter logout, then OAuth...');
+            window.location.href = logoutUrl;
+        </script>
+    </body>
+    </html>
+    """
+    
+    return HTMLResponse(content=logout_then_oauth_html)
 
 
 @app.get("/v1/oauth/x/callback")
