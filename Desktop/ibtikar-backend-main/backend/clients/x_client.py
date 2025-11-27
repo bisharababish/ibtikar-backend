@@ -51,9 +51,11 @@ def build_auth_url(state: str, code_challenge: str, force_login: bool = True) ->
     }
     
     # CRITICAL: Force login screen (username/password) every time
-    # This makes Twitter show the SIGN IN page, not the authorization page
+    # Use BOTH force_login=true AND prompt=login for maximum reliability
     # force_login=true forces Twitter to show login screen even if user is logged in
+    # prompt=login also forces re-authentication
     params["force_login"] = "true"
+    params["prompt"] = "login"  # Additional parameter to force login screen
     
     # Add multiple unique parameters to prevent ANY caching
     # This ensures Twitter treats each request as completely new
@@ -71,15 +73,20 @@ def build_auth_url(state: str, code_challenge: str, force_login: bool = True) ->
     qp = httpx.QueryParams(params)
     auth_url = f"{AUTH_URL}?{qp}"
     
-    # Verify force_login is in the URL
+    # Verify force_login and prompt are in the URL
     if "force_login=true" not in auth_url:
         print("⚠️ WARNING: force_login=true not found in OAuth URL!")
     else:
         print("✅ Verified: force_login=true is in OAuth URL")
     
+    if "prompt=login" not in auth_url:
+        print("⚠️ WARNING: prompt=login not found in OAuth URL!")
+    else:
+        print("✅ Verified: prompt=login is in OAuth URL")
+    
     print(f"🔗 Built OAuth URL (will show SIGN IN page every time)")
     print(f"   URL: {auth_url}")
-    print(f"   force_login=true ensures login screen (username/password entry)")
+    print(f"   force_login=true + prompt=login ensures login screen (username/password entry)")
     return auth_url
 
 

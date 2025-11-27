@@ -252,11 +252,14 @@ async def x_oauth_start(user_id: int = 1, db: Session = Depends(get_db)):
 
     # ALWAYS clear existing tokens first to ensure fresh login
     # This is critical for allowing account switching
-    existing_token = db.query(models.XToken).filter(models.XToken.user_id == user_id).first()
-    if existing_token:
-        print(f"🧹 Clearing existing tokens for user_id={user_id} to allow account switching")
-        db.delete(existing_token)
+    # Clear ALL tokens for this user (in case there are multiple)
+    existing_tokens = db.query(models.XToken).filter(models.XToken.user_id == user_id).all()
+    if existing_tokens:
+        print(f"🧹 Clearing {len(existing_tokens)} existing token(s) for user_id={user_id} to allow account switching")
+        for token in existing_tokens:
+            db.delete(token)
         db.commit()
+        print(f"✅ All tokens cleared for user_id={user_id}")
     
     verifier, challenge = generate_pkce()
     state = new_state()
@@ -269,10 +272,11 @@ async def x_oauth_start(user_id: int = 1, db: Session = Depends(get_db)):
     from ..clients.x_client import build_auth_url
     twitter_auth_url = build_auth_url(state, challenge, force_login=True)
     
-    print(f"🔗 Creating logout-then-oauth flow to force login screen")
+    print(f"🔗 Creating OAuth flow to force login screen")
     print(f"   OAuth URL: {twitter_auth_url[:250]}...")
-    print(f"   ✅ Tokens cleared")
+    print(f"   ✅ All tokens cleared")
     print(f"   ✅ force_login=true enabled")
+    print(f"   ✅ prompt=login enabled")
     
     # Direct redirect to OAuth URL with force_login=true
     # The HTML logout approach doesn't work well in Expo WebBrowser
