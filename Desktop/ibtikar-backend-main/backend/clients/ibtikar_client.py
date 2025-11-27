@@ -51,8 +51,15 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
         model_path = url.split("models/")[-1] if "models/" in url else url.split("/")[-1]
     elif is_space_api:
         # Extract model name from Space URL (e.g., bisharababish-arabert-toxic-classifier)
-        # This is just for logging, not used for Router API fallback
-        model_path = url.split("hf.space")[0].split("//")[-1].split(".")[0]
+        # Convert Space name to model path: bisharababish-arabert-toxic-classifier -> bisharababish/arabert-toxic-classifier
+        space_name = url.split("hf.space")[0].split("//")[-1].split(".")[0]
+        # Convert hyphenated space name to model path format
+        if "-" in space_name:
+            parts = space_name.split("-", 1)  # Split on first hyphen
+            model_path = f"{parts[0]}/{parts[1]}" if len(parts) == 2 else space_name.replace("-", "/")
+        else:
+            model_path = space_name
+        print(f"🔄 Converted Space name '{space_name}' to model path: {model_path}")
     
     if not model_path:
         print(f"⚠️ Could not extract model path from URL: {url}")
@@ -112,8 +119,69 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         headers=headers
                     )
                 
-                # Handle 404 or 410 - try Router API as fallback (only for Inference API, not Space API)
-                if (r.status_code == 404 or r.status_code == 410) and i == 0 and not is_space_api:
+                # Handle 404 or 410 - try Router API as fallback
+                # For Space API 404, try to fall back to Router API or Inference API
+                if (r.status_code == 404 or r.status_code == 410) and i == 0:
+                    if is_space_api:
+                        print(f"⚠️ Space API returned {r.status_code} - Space may not exist or be running")
+                        print(f"   Error response: {r.text[:200]}")
+                        print(f"🔄 Falling back to Router API for model: {model_path}")
+                        # Try Router API as fallback
+                        router_url = f"https://router.huggingface.co/v1/models/{model_path}"
+                        print(f"🔄 Trying Router API: {router_url}")
+                        try:
+                            router_r = await client.post(
+                                router_url,
+                                json={"inputs": text},  # Router API uses Inference API format
+                                headers=headers
+                            )
+                            # If Router API works, use it for all remaining texts
+                            if router_r.status_code == 200:
+                                print(f"✅ Router API works! Using it for all texts.")
+                                url = router_url  # Update URL for remaining texts
+                                is_space_api = False  # Switch to Router API mode
+                                r = router_r  # Use Router API response
+                            elif router_r.status_code == 503:
+                                # Model loading on Router API, wait and retry
+                                print(f"⏳ Router API model is loading (503), waiting 20s...")
+                                await asyncio.sleep(20)
+                                router_r = await client.post(
+                                    router_url,
+                                    json={"inputs": text},
+                                    headers=headers
+                                )
+                                if router_r.status_code == 200:
+                                    print(f"✅ Router API works after wait! Using it for all texts.")
+                                    url = router_url
+                                    is_space_api = False
+                                    r = router_r
+                                else:
+                                    router_r.raise_for_status()
+                            else:
+                                router_r.raise_for_status()
+                        except Exception as router_err:
+                            print(f"❌ Router API also failed: {router_err}")
+                            # Try Inference API as last resort
+                            inference_url = f"https://api-inference.huggingface.co/models/{model_path}"
+                            print(f"🔄 Trying Inference API as last resort: {inference_url}")
+                            try:
+                                inference_r = await client.post(
+                                    inference_url,
+                                    json={"inputs": text},
+                                    headers=headers
+                                )
+                                if inference_r.status_code == 200:
+                                    print(f"✅ Inference API works! Using it for all texts.")
+                                    url = inference_url
+                                    is_space_api = False
+                                    r = inference_r
+                                else:
+                                    inference_r.raise_for_status()
+                            except Exception as inference_err:
+                                print(f"❌ All API fallbacks failed. Original Space API error: {r.status_code}")
+                                raise Exception(f"Space API returned 404 and all fallbacks failed. Space may not exist: {url}") from router_err
+                    else:
+                        # Original Inference API fallback logic
                     print(f"⚠️ Inference API returned {r.status_code}, trying Router API...")
                     router_url = f"https://router.huggingface.co/v1/models/{model_path}"
                     print(f"🔄 Trying Router API: {router_url}")
