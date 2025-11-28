@@ -172,76 +172,19 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                                 raise Exception(f"Router API returned {router_r.status_code}: {error_msg}")
                         except Exception as router_err:
                             print(f"❌ Router API also failed: {router_err}")
-                            # Try Inference API as last resort
-                            inference_url = f"https://api-inference.huggingface.co/models/{model_path}"
-                            print(f"🔄 Trying Inference API as last resort: {inference_url}")
-                            # Prepare headers with authentication for Inference API
-                            inference_headers = {"Content-Type": "application/json"}
-                            if settings.HF_TOKEN:
-                                inference_headers["Authorization"] = f"Bearer {settings.HF_TOKEN}"
-                                print(f"🔑 Using HF_TOKEN for Inference API authentication (token: {settings.HF_TOKEN[:10]}...)")
-                            else:
-                                print(f"⚠️ No HF_TOKEN - Inference API may require authentication")
-                            try:
-                                print(f"🔍 Making Inference API request to: {inference_url}")
-                                inference_r = await client.post(
-                                    inference_url,
-                                    json={"inputs": text},
-                                    headers=inference_headers
-                                )
-                                print(f"📋 Inference API response status: {inference_r.status_code}")
-                                if inference_r.status_code == 200:
-                                    print(f"✅ Inference API works! Using it for all texts.")
-                                    url = inference_url
-                                    is_space_api = False
-                                    r = inference_r
-                                elif inference_r.status_code == 503:
-                                    # Model loading on Inference API, wait and retry
-                                    print(f"⏳ Inference API model is loading (503), waiting 20s...")
-                                    await asyncio.sleep(20)
-                                    inference_r = await client.post(
-                                        inference_url,
-                                        json={"inputs": text},
-                                        headers=inference_headers
-                                    )
-                                    if inference_r.status_code == 200:
-                                        print(f"✅ Inference API works after wait! Using it for all texts.")
-                                        url = inference_url
-                                        is_space_api = False
-                                        r = inference_r
-                                    else:
-                                        print(f"❌ Inference API still failed after wait: {inference_r.status_code}")
-                                        raise Exception(f"All APIs failed. Space: 404, Router: {router_err}, Inference: {inference_r.status_code}")
-                                elif inference_r.status_code == 401 and settings.HF_TOKEN:
-                                    # Token might be invalid - try without authentication for public models
-                                    print(f"⚠️ Inference API returned 401 with token - token might be invalid")
-                                    print(f"🔄 Trying Inference API without authentication (public model)...")
-                                    inference_r_no_auth = await client.post(
-                                        inference_url,
-                                        json={"inputs": text},
-                                        headers={"Content-Type": "application/json"}
-                                    )
-                                    if inference_r_no_auth.status_code == 200:
-                                        print(f"✅ Inference API works without authentication! Using it for all texts.")
-                                        url = inference_url
-                                        is_space_api = False
-                                        r = inference_r_no_auth
-                                    else:
-                                        print(f"❌ Inference API also failed without auth: {inference_r_no_auth.status_code}")
-                                        error_text = inference_r_no_auth.text[:200] if inference_r_no_auth.text else 'No error text'
-                                        raise Exception(f"All APIs failed. Space: 404, Router: {router_err}, Inference (with token): 401, Inference (no auth): {inference_r_no_auth.status_code} - {error_text}")
-                                else:
-                                    error_text = inference_r.text[:200] if inference_r.text else 'No error text'
-                                    print(f"❌ Inference API returned {inference_r.status_code}: {error_text}")
-                                    raise Exception(f"All APIs failed. Space: 404, Router: {router_err}, Inference: {inference_r.status_code} - {error_text}")
-                            except Exception as inference_err:
-                                print(f"❌ All API fallbacks failed. Original Space API error: {r.status_code}")
-                                print(f"   Router API error: {router_err}")
-                                print(f"   Inference API error: {inference_err}")
-                                raise Exception(f"Space API returned 404 and all fallbacks failed. Space may not exist: {url}. Router error: {router_err}. Inference error: {inference_err}") from inference_err
+                            # Inference API is deprecated (returns 410) - don't try it
+                            print(f"⚠️ Inference API is deprecated - skipping fallback")
+                            print(f"❌ All API fallbacks failed. Original Space API error: {r.status_code}")
+                            print(f"   Router API error: {router_err}")
+                            print(f"   Model path tried: {model_path}")
+                            print(f"   Possible issues:")
+                            print(f"     1. Model '{model_path}' doesn't exist on Hugging Face")
+                            print(f"     2. Model is private and requires authentication")
+                            print(f"     3. Space '{url}' doesn't exist or isn't running")
+                            raise Exception(f"All Hugging Face APIs failed. Space API: 404, Router API: 404 (model '{model_path}' not found). Please verify the model exists on Hugging Face or update IBTIKAR_URL to point to a valid model/Space.") from router_err
                     else:
-                        # Original Inference API fallback logic
-                        print(f"⚠️ Inference API returned {r.status_code}, trying Router API...")
+                        # Router API fallback for non-Space API URLs
+                        print(f"⚠️ API returned {r.status_code}, trying Router API as fallback...")
                         router_url = f"https://router.huggingface.co/v1/models/{model_path}"
                         print(f"🔄 Trying Router API: {router_url}")
                         router_r = await client.post(
@@ -275,7 +218,7 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                             error_msg = router_r.text[:200] if router_r.text else 'No error text'
                             print(f"   Error: {error_msg}")
                             # Raise error with both attempts
-                            raise Exception(f"Inference API ({r.status_code}) and Router API ({router_r.status_code}) both failed. Router error: {error_msg}")
+                            raise Exception(f"API ({r.status_code}) and Router API ({router_r.status_code}) both failed. Router error: {error_msg}")
                 
                 # For Space API, handle errors - but skip if 404/410 (already handled with fallback above)
                 # Only raise for other error codes
@@ -575,12 +518,12 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
     print(f"✅ IBTIKAR_URL is configured: {url}")
     
     # If URL is just a model path (like "Bisharababish/arabert-toxic-classifier"),
-    # convert it to Inference API URL
+    # convert it to Router API URL (Inference API is deprecated)
     if not url.startswith("http") and "/" in url and not url.startswith("/"):
-        print(f"🔄 Converting model path to Inference API URL")
-        url = f"https://api-inference.huggingface.co/models/{url}"
-        print(f"✅ Using Inference API URL: {url}")
-        print(f"ℹ️  Will automatically retry with Router API if Inference API is deprecated")
+        print(f"🔄 Converting model path to Router API URL")
+        url = f"https://router.huggingface.co/v1/models/{url}"
+        print(f"✅ Using Router API URL: {url}")
+        print(f"ℹ️  Router API is the current recommended API (Inference API is deprecated)")
     else:
         print(f"✅ Using URL as configured: {url}")
 
