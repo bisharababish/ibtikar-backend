@@ -474,6 +474,31 @@ async def migrate_add_x_user_id():
             "message": "Migration failed. Check server logs for details."
         }
 
+@app.post("/v1/migrate/add-cached-user-profile")
+async def migrate_add_cached_user_profile():
+    """
+    One-time migration endpoint to add cached user profile columns.
+    Call this once after deploying the new code.
+    Safe to call multiple times - won't duplicate columns.
+    """
+    from backend.db.migrate_add_cached_user_profile import migrate
+    try:
+        result = migrate()
+        return {
+            "success": True,
+            "message": "Migration completed successfully! Cached user profile columns added to x_tokens table.",
+            "added": True
+        }
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"❌ Migration endpoint error: {error_details}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Migration failed. Check server logs for details."
+        }
+
 @app.get("/v1/me/link-status")
 def link_status(user_id: int = 1, db: Session = Depends(get_db)):
     xt = db.query(models.XToken).filter(models.XToken.user_id == user_id).first()
