@@ -125,28 +125,43 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                     if is_space_api:
                         print(f"⚠️ Space API returned {r.status_code} - Space may be sleeping or not running")
                         print(f"   Error response: {r.text[:200]}")
-                        # Free Spaces can sleep - wait longer and retry once
-                        print(f"🔄 Space might be sleeping, waiting 30s and retrying Space API...")
-                        await asyncio.sleep(30)
-                        retry_request_data = {"data": [text]}
-                        r_retry = await client.post(
-                            url,
-                            json=retry_request_data,
-                            headers=headers
-                        )
-                        if r_retry.status_code == 200:
-                            print(f"✅ Space API woke up and works! Using it for all texts.")
-                            r = r_retry
-                        elif r_retry.status_code == 503:
-                            print(f"⏳ Space is loading (503), waiting 20s more...")
-                            await asyncio.sleep(20)
-                            r_retry = await client.post(url, json=retry_request_data, headers=headers)
+                        # Free Spaces can sleep - try multiple times with increasing wait times
+                        max_retries = 3
+                        wait_times = [20, 30, 40]  # Progressive wait times
+                        r_retry = None
+                        for retry_num in range(max_retries):
+                            wait_time = wait_times[retry_num]
+                            print(f"🔄 Space might be sleeping, attempt {retry_num + 1}/{max_retries}, waiting {wait_time}s and retrying Space API...")
+                            await asyncio.sleep(wait_time)
+                            retry_request_data = {"data": [text]}
+                            r_retry = await client.post(
+                                url,
+                                json=retry_request_data,
+                                headers=headers
+                            )
                             if r_retry.status_code == 200:
-                                print(f"✅ Space API works after loading! Using it for all texts.")
+                                print(f"✅ Space API woke up after {wait_time}s! Using it for all texts.")
                                 r = r_retry
+                                break  # Success, exit retry loop
+                            elif r_retry.status_code == 503:
+                                print(f"⏳ Space is loading (503), waiting 20s more...")
+                                await asyncio.sleep(20)
+                                r_retry = await client.post(url, json=retry_request_data, headers=headers)
+                                if r_retry.status_code == 200:
+                                    print(f"✅ Space API works after loading! Using it for all texts.")
+                                    r = r_retry
+                                    break  # Success, exit retry loop
+                                else:
+                                    print(f"❌ Space API still loading/failed: {r_retry.status_code}")
+                                    # Continue to next retry attempt
                             else:
-                                print(f"❌ Space API still failed after retry: {r_retry.status_code}")
-                                print(f"🔄 Falling back to Router API for model: {model_path}")
+                                print(f"❌ Space API retry {retry_num + 1} returned {r_retry.status_code}")
+                                # Continue to next retry attempt
+                        
+                        # If all retries failed, fall back to Router API
+                        if r_retry is None or r_retry.status_code != 200:
+                            print(f"❌ Space API failed after {max_retries} retries")
+                            print(f"🔄 Falling back to Router API for model: {model_path}")
                                 # Try Router API as fallback
                                 router_url = f"https://router.huggingface.co/v1/models/{model_path}"
                                 print(f"🔄 Trying Router API: {router_url}")
