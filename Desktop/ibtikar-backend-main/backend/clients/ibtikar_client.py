@@ -156,9 +156,13 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                                     is_space_api = False
                                     r = router_r
                                 else:
-                                    router_r.raise_for_status()
+                                    # Router API still failed, continue to Inference API fallback
+                                    error_msg = router_r.text[:200] if router_r.text else f"Status {router_r.status_code}"
+                                    raise Exception(f"Router API failed after wait: {error_msg}")
                             else:
-                                router_r.raise_for_status()
+                                # Router API failed with other status code, continue to Inference API fallback
+                                error_msg = router_r.text[:200] if router_r.text else f"Status {router_r.status_code}"
+                                raise Exception(f"Router API returned {router_r.status_code}: {error_msg}")
                         except Exception as router_err:
                             print(f"❌ Router API also failed: {router_err}")
                             # Try Inference API as last resort
@@ -175,11 +179,31 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                                     url = inference_url
                                     is_space_api = False
                                     r = inference_r
+                                elif inference_r.status_code == 503:
+                                    # Model loading on Inference API, wait and retry
+                                    print(f"⏳ Inference API model is loading (503), waiting 20s...")
+                                    await asyncio.sleep(20)
+                                    inference_r = await client.post(
+                                        inference_url,
+                                        json={"inputs": text},
+                                        headers=headers
+                                    )
+                                    if inference_r.status_code == 200:
+                                        print(f"✅ Inference API works after wait! Using it for all texts.")
+                                        url = inference_url
+                                        is_space_api = False
+                                        r = inference_r
+                                    else:
+                                        print(f"❌ Inference API still failed after wait: {inference_r.status_code}")
+                                        raise Exception(f"All APIs failed. Space: 404, Router: {router_err}, Inference: {inference_r.status_code}")
                                 else:
-                                    inference_r.raise_for_status()
+                                    print(f"❌ Inference API returned {inference_r.status_code}: {inference_r.text[:200] if inference_r.text else 'No error text'}")
+                                    raise Exception(f"All APIs failed. Space: 404, Router: {router_err}, Inference: {inference_r.status_code}")
                             except Exception as inference_err:
                                 print(f"❌ All API fallbacks failed. Original Space API error: {r.status_code}")
-                                raise Exception(f"Space API returned 404 and all fallbacks failed. Space may not exist: {url}") from router_err
+                                print(f"   Router API error: {router_err}")
+                                print(f"   Inference API error: {inference_err}")
+                                raise Exception(f"Space API returned 404 and all fallbacks failed. Space may not exist: {url}. Router error: {router_err}. Inference error: {inference_err}") from inference_err
                     else:
                         # Original Inference API fallback logic
                         print(f"⚠️ Inference API returned {r.status_code}, trying Router API...")
