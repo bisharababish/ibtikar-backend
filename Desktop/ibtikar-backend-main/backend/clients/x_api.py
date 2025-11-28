@@ -91,11 +91,37 @@ async def get_me(user_id: int, db: Session) -> Dict[str, Any]:
         access = _store_tokens(row, tj, db)
         r = await _call(access)
     
-    # Handle rate limiting
+    # Handle rate limiting - return cached data if available
     if r.status_code == 429:
         reset = r.headers.get("x-rate-limit-reset")
         limit = r.headers.get("x-rate-limit-limit", "unknown")
         remaining = r.headers.get("x-rate-limit-remaining", "0")
+        
+        # Check if we have cached user data (with backward compatibility)
+        if row:
+            try:
+                cached_name = getattr(row, 'cached_name', None)
+                cached_username = getattr(row, 'cached_username', None)
+                if cached_name or cached_username:
+                    print(f"⚠️ Rate limited, but returning cached user data")
+                    return {
+                        "data": {
+                            "id": getattr(row, 'x_user_id', None) or "",
+                            "name": cached_name or "",
+                            "username": cached_username or "",
+                            "profile_image_url": getattr(row, 'cached_profile_image_url', None) or "",
+                        },
+                        "rate_limited": True,
+                        "resource": "users/me",
+                        "reset": reset,
+                        "limit": limit,
+                        "remaining": remaining,
+                        "cached": True,  # Indicate this is cached data
+                    }
+            except AttributeError:
+                # Columns don't exist yet - migration not run
+                pass
+        
         return {
             "rate_limited": True,
             "resource": "users/me",
@@ -105,7 +131,27 @@ async def get_me(user_id: int, db: Session) -> Dict[str, Any]:
         }
 
     r.raise_for_status()
-    return r.json()
+    result = r.json()
+    
+    # Cache user profile data for future rate limit scenarios (with backward compatibility)
+    if row and result.get("data"):
+        try:
+            user_data = result["data"]
+            row.x_user_id = str(user_data.get("id", ""))
+            # Only set cached fields if they exist (backward compatibility)
+            if hasattr(row, 'cached_name'):
+                row.cached_name = user_data.get("name", "")
+            if hasattr(row, 'cached_username'):
+                row.cached_username = user_data.get("username", "")
+            if hasattr(row, 'cached_profile_image_url'):
+                row.cached_profile_image_url = user_data.get("profile_image_url", "")
+            db.commit()
+            print(f"✅ Cached user profile data: {user_data.get('name', '')} (@{user_data.get('username', '')})")
+        except AttributeError:
+            # Columns don't exist yet - migration not run, but that's OK
+            print(f"⚠️ Cached columns don't exist yet - skipping cache (migration needed)")
+    
+    return result
 
 async def get_my_recent_tweets(user_id: int, db: Session, max_results: int = 20) -> Dict[str, Any]:
     # Check if we have cached Twitter user ID to avoid rate limit

@@ -56,6 +56,11 @@ class XToken(Base):
     
     # Cache the Twitter user ID to avoid calling get_me every time
     x_user_id = Column(String, nullable=True, index=True)  # Twitter user ID (e.g., "1234567890")
+    
+    # Cache user profile data to return when rate limited
+    cached_name = Column(String, nullable=True)  # Cached Twitter name
+    cached_username = Column(String, nullable=True)  # Cached Twitter username
+    cached_profile_image_url = Column(String, nullable=True)  # Cached profile image URL
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
