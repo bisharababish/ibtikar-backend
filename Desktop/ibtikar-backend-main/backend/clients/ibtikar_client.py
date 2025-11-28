@@ -87,7 +87,8 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
         print("   Note: Router API may require authentication even for public models")
         print("   Add HF_TOKEN environment variable in Render settings if requests fail")
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    # Increased timeout to accommodate Space API retries (20s + 30s + 40s = 90s, plus processing time)
+    async with httpx.AsyncClient(timeout=120.0) as client:
         for i, text in enumerate(texts):
             try:
                 print(f"🔍 Processing text {i+1}/{len(texts)}: {text[:50]}...")
