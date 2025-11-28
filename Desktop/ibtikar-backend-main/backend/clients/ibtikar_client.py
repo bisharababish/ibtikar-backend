@@ -182,41 +182,41 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                                 raise Exception(f"Space API returned 404 and all fallbacks failed. Space may not exist: {url}") from router_err
                     else:
                         # Original Inference API fallback logic
-                    print(f"⚠️ Inference API returned {r.status_code}, trying Router API...")
-                    router_url = f"https://router.huggingface.co/v1/models/{model_path}"
-                    print(f"🔄 Trying Router API: {router_url}")
-                    router_r = await client.post(
-                        router_url,
-                        json={"inputs": text},  # Router API uses Inference API format
-                        headers=headers
-                    )
-                    # If Router API works, use it for all remaining texts
-                    if router_r.status_code == 200:
-                        print(f"✅ Router API works! Using it for all texts.")
-                        url = router_url  # Update URL for remaining texts
-                        r = router_r  # Use Router API response
-                    elif router_r.status_code == 503:
-                        # Model loading on Router API, wait and retry
-                        print(f"⏳ Router API model is loading (503), waiting 20s...")
-                        await asyncio.sleep(20)
+                        print(f"⚠️ Inference API returned {r.status_code}, trying Router API...")
+                        router_url = f"https://router.huggingface.co/v1/models/{model_path}"
+                        print(f"🔄 Trying Router API: {router_url}")
                         router_r = await client.post(
                             router_url,
-                            json={"inputs": text},
+                            json={"inputs": text},  # Router API uses Inference API format
                             headers=headers
                         )
+                        # If Router API works, use it for all remaining texts
                         if router_r.status_code == 200:
-                            print(f"✅ Router API works after waiting! Using it for all texts.")
-                            url = router_url
-                            r = router_r
+                            print(f"✅ Router API works! Using it for all texts.")
+                            url = router_url  # Update URL for remaining texts
+                            r = router_r  # Use Router API response
+                        elif router_r.status_code == 503:
+                            # Model loading on Router API, wait and retry
+                            print(f"⏳ Router API model is loading (503), waiting 20s...")
+                            await asyncio.sleep(20)
+                            router_r = await client.post(
+                                router_url,
+                                json={"inputs": text},
+                                headers=headers
+                            )
+                            if router_r.status_code == 200:
+                                print(f"✅ Router API works after waiting! Using it for all texts.")
+                                url = router_url
+                                r = router_r
+                            else:
+                                print(f"❌ Router API still loading or failed: {router_r.status_code}")
+                                raise Exception(f"Router API not available: {router_r.status_code} - {router_r.text[:200] if router_r.text else 'No error text'}")
                         else:
-                            print(f"❌ Router API still loading or failed: {router_r.status_code}")
-                            raise Exception(f"Router API not available: {router_r.status_code} - {router_r.text[:200] if router_r.text else 'No error text'}")
-                    else:
-                        print(f"❌ Router API also failed with {router_r.status_code}")
-                        error_msg = router_r.text[:200] if router_r.text else 'No error text'
-                        print(f"   Error: {error_msg}")
-                        # Raise error with both attempts
-                        raise Exception(f"Inference API ({r.status_code}) and Router API ({router_r.status_code}) both failed. Router error: {error_msg}")
+                            print(f"❌ Router API also failed with {router_r.status_code}")
+                            error_msg = router_r.text[:200] if router_r.text else 'No error text'
+                            print(f"   Error: {error_msg}")
+                            # Raise error with both attempts
+                            raise Exception(f"Inference API ({r.status_code}) and Router API ({router_r.status_code}) both failed. Router error: {error_msg}")
                 
                 # For Space API, handle errors - but skip if 404/410 (already handled with fallback above)
                 # Only raise for other error codes
