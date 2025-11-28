@@ -233,7 +233,10 @@ async def get_following_feed(user_id: int, db: Session, authors_limit: int = 25,
         print(f"⚠️ No cached Twitter user ID, calling get_me (this may hit rate limit)")
         me = await get_me(user_id, db)
         if isinstance(me, dict) and me.get("rate_limited"):
-            return me  # Return rate limit info from get_me
+            # Return rate limit info with helpful message
+            rate_limit_info = me.copy()
+            rate_limit_info["message"] = "Twitter user ID not cached yet. Please wait for rate limit to reset, then log in again to cache your user ID. After that, preview will work without hitting rate limits."
+            return rate_limit_info
         uid = me["data"]["id"]
         
         # Cache it for next time (if column exists)
