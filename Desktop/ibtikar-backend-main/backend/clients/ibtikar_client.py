@@ -129,11 +129,18 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         # Try Router API as fallback
                         router_url = f"https://router.huggingface.co/v1/models/{model_path}"
                         print(f"🔄 Trying Router API: {router_url}")
+                        # Prepare headers with authentication for Router API
+                        router_headers = {"Content-Type": "application/json"}
+                        if settings.HF_TOKEN:
+                            router_headers["Authorization"] = f"Bearer {settings.HF_TOKEN}"
+                            print(f"🔑 Using HF_TOKEN for Router API authentication")
+                        else:
+                            print(f"⚠️ No HF_TOKEN - Router API may require authentication")
                         try:
                             router_r = await client.post(
                                 router_url,
                                 json={"inputs": text},  # Router API uses Inference API format
-                                headers=headers
+                                headers=router_headers
                             )
                             # If Router API works, use it for all remaining texts
                             if router_r.status_code == 200:
@@ -148,7 +155,7 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                                 router_r = await client.post(
                                     router_url,
                                     json={"inputs": text},
-                                    headers=headers
+                                    headers=router_headers
                                 )
                                 if router_r.status_code == 200:
                                     print(f"✅ Router API works after wait! Using it for all texts.")
@@ -168,11 +175,18 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                             # Try Inference API as last resort
                             inference_url = f"https://api-inference.huggingface.co/models/{model_path}"
                             print(f"🔄 Trying Inference API as last resort: {inference_url}")
+                            # Prepare headers with authentication for Inference API
+                            inference_headers = {"Content-Type": "application/json"}
+                            if settings.HF_TOKEN:
+                                inference_headers["Authorization"] = f"Bearer {settings.HF_TOKEN}"
+                                print(f"🔑 Using HF_TOKEN for Inference API authentication")
+                            else:
+                                print(f"⚠️ No HF_TOKEN - Inference API may require authentication")
                             try:
                                 inference_r = await client.post(
                                     inference_url,
                                     json={"inputs": text},
-                                    headers=headers
+                                    headers=inference_headers
                                 )
                                 if inference_r.status_code == 200:
                                     print(f"✅ Inference API works! Using it for all texts.")
@@ -186,7 +200,7 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                                     inference_r = await client.post(
                                         inference_url,
                                         json={"inputs": text},
-                                        headers=headers
+                                        headers=inference_headers
                                     )
                                     if inference_r.status_code == 200:
                                         print(f"✅ Inference API works after wait! Using it for all texts.")
