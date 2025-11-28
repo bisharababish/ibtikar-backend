@@ -179,15 +179,17 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                             inference_headers = {"Content-Type": "application/json"}
                             if settings.HF_TOKEN:
                                 inference_headers["Authorization"] = f"Bearer {settings.HF_TOKEN}"
-                                print(f"🔑 Using HF_TOKEN for Inference API authentication")
+                                print(f"🔑 Using HF_TOKEN for Inference API authentication (token: {settings.HF_TOKEN[:10]}...)")
                             else:
                                 print(f"⚠️ No HF_TOKEN - Inference API may require authentication")
                             try:
+                                print(f"🔍 Making Inference API request to: {inference_url}")
                                 inference_r = await client.post(
                                     inference_url,
                                     json={"inputs": text},
                                     headers=inference_headers
                                 )
+                                print(f"📋 Inference API response status: {inference_r.status_code}")
                                 if inference_r.status_code == 200:
                                     print(f"✅ Inference API works! Using it for all texts.")
                                     url = inference_url
@@ -210,9 +212,28 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                                     else:
                                         print(f"❌ Inference API still failed after wait: {inference_r.status_code}")
                                         raise Exception(f"All APIs failed. Space: 404, Router: {router_err}, Inference: {inference_r.status_code}")
+                                elif inference_r.status_code == 401 and settings.HF_TOKEN:
+                                    # Token might be invalid - try without authentication for public models
+                                    print(f"⚠️ Inference API returned 401 with token - token might be invalid")
+                                    print(f"🔄 Trying Inference API without authentication (public model)...")
+                                    inference_r_no_auth = await client.post(
+                                        inference_url,
+                                        json={"inputs": text},
+                                        headers={"Content-Type": "application/json"}
+                                    )
+                                    if inference_r_no_auth.status_code == 200:
+                                        print(f"✅ Inference API works without authentication! Using it for all texts.")
+                                        url = inference_url
+                                        is_space_api = False
+                                        r = inference_r_no_auth
+                                    else:
+                                        print(f"❌ Inference API also failed without auth: {inference_r_no_auth.status_code}")
+                                        error_text = inference_r_no_auth.text[:200] if inference_r_no_auth.text else 'No error text'
+                                        raise Exception(f"All APIs failed. Space: 404, Router: {router_err}, Inference (with token): 401, Inference (no auth): {inference_r_no_auth.status_code} - {error_text}")
                                 else:
-                                    print(f"❌ Inference API returned {inference_r.status_code}: {inference_r.text[:200] if inference_r.text else 'No error text'}")
-                                    raise Exception(f"All APIs failed. Space: 404, Router: {router_err}, Inference: {inference_r.status_code}")
+                                    error_text = inference_r.text[:200] if inference_r.text else 'No error text'
+                                    print(f"❌ Inference API returned {inference_r.status_code}: {error_text}")
+                                    raise Exception(f"All APIs failed. Space: 404, Router: {router_err}, Inference: {inference_r.status_code} - {error_text}")
                             except Exception as inference_err:
                                 print(f"❌ All API fallbacks failed. Original Space API error: {r.status_code}")
                                 print(f"   Router API error: {router_err}")
