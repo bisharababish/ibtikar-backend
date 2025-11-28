@@ -382,16 +382,40 @@ async def x_oauth_callback(
         existing.token_type = token.get("token_type")
         existing.expires_in = token.get("expires_in")
 
-    # Fetch and cache Twitter user ID to avoid rate limits
+    # Fetch and cache Twitter user ID and profile data to avoid rate limits
     if not existing.x_user_id:
         try:
-            print(f"📥 Fetching Twitter user ID to cache...")
+            print(f"📥 Fetching Twitter user ID and profile to cache...")
             me = await get_me(user_id, db)
             if isinstance(me, dict) and not me.get("rate_limited") and me.get("data"):
-                existing.x_user_id = me["data"]["id"]
-                print(f"✅ Cached Twitter user ID: {existing.x_user_id}")
+                user_data = me["data"]
+                existing.x_user_id = user_data.get("id", "")
+                # Also cache profile data if columns exist
+                try:
+                    if hasattr(existing, 'cached_name'):
+                        existing.cached_name = user_data.get("name", "")
+                    if hasattr(existing, 'cached_username'):
+                        existing.cached_username = user_data.get("username", "")
+                    if hasattr(existing, 'cached_profile_image_url'):
+                        existing.cached_profile_image_url = user_data.get("profile_image_url", "")
+                    print(f"✅ Cached Twitter user ID: {existing.x_user_id} and profile data")
+                except AttributeError:
+                    # Columns don't exist yet - that's OK, just cache user ID
+                    print(f"✅ Cached Twitter user ID: {existing.x_user_id} (profile columns not available yet)")
+            elif isinstance(me, dict) and me.get("rate_limited"):
+                reset_time = me.get("reset")
+                if reset_time:
+                    try:
+                        import time
+                        reset_human = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(reset_time)))
+                        print(f"⚠️ Rate limited - cannot cache user ID now. Reset time: {reset_human}")
+                        print(f"   User ID will be cached automatically once rate limit resets and you use the app again.")
+                    except:
+                        print(f"⚠️ Rate limited - cannot cache user ID now. Reset: {reset_time}")
+                else:
+                    print(f"⚠️ Rate limited - cannot cache user ID now")
             else:
-                print(f"⚠️ Could not fetch Twitter user ID (rate limited or error)")
+                print(f"⚠️ Could not fetch Twitter user ID (error or unexpected response)")
         except Exception as e:
             print(f"⚠️ Error fetching Twitter user ID: {e} (will fetch on first use)")
 
@@ -615,17 +639,33 @@ async def analysis_preview(
                 )
             except Exception:
                 reset_human = None
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "error": "rate_limited",
-                    "resource": raw.get("resource"),
-                    "reset_epoch": reset,
-                    "reset_time": reset_human,
-                    "limit": raw.get("limit"),
-                    "remaining": raw.get("remaining"),
-                },
-            )
+            
+            # Check if this is because Twitter user ID isn't cached
+            from backend.db.models import XToken
+            token_row = db.query(XToken).filter(XToken.user_id == user_id).first()
+            has_cached_uid = token_row and getattr(token_row, 'x_user_id', None)
+            
+            error_detail = {
+                "error": "rate_limited",
+                "resource": raw.get("resource"),
+                "reset_epoch": reset,
+                "reset_time": reset_human,
+                "limit": raw.get("limit"),
+                "remaining": raw.get("remaining"),
+            }
+            
+            if not has_cached_uid:
+                error_detail["message"] = (
+                    "Twitter user ID is not cached yet because the API was rate limited during login. "
+                    f"Please wait for the rate limit to reset (reset time: {reset_human or 'unknown'}), "
+                    "then log in again. After that, your user ID will be cached and preview will work without hitting rate limits."
+                )
+            else:
+                error_detail["message"] = (
+                    f"Twitter API rate limit exceeded. Please wait 5-10 minutes. Reset time: {reset_human or 'unknown'}"
+                )
+            
+            raise HTTPException(status_code=429, detail=error_detail)
 
         posts = x_tweets_to_posts(raw)
         if not posts:
