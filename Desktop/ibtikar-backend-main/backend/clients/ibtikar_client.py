@@ -5,6 +5,14 @@ import time
 import httpx
 from backend.core.config import settings
 
+# Try importing gradio_client for Space API (more reliable than direct HTTP)
+try:
+    from gradio_client import Client
+    GRADIO_CLIENT_AVAILABLE = True
+except ImportError:
+    GRADIO_CLIENT_AVAILABLE = False
+    print("⚠️ gradio-client not available - will use HTTP requests for Space API")
+
 
 BAD_LOCAL = ["hate", "kys", "die", "kill", "dumb", "trash", "terror"]
 
@@ -36,10 +44,14 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     # Check if this is a Space API URL (hf.space)
     is_space_api = "hf.space" in url
     
-    # For Space API, ensure we have the /api/predict endpoint
-    if is_space_api and "/api/predict" not in url:
-        url = url.rstrip("/") + "/api/predict"
-        print(f"🔄 Updated Space API URL to: {url}")
+    # For Space API, try different endpoint formats
+    # Gradio Spaces might use /api/predict or /api/run/{function_name}
+    if is_space_api:
+        if "/api/" not in url:
+            # Try /api/predict first (standard Gradio API)
+            url = url.rstrip("/") + "/api/predict"
+            print(f"🔄 Updated Space API URL to: {url}")
+        # If /api/predict doesn't work, we'll try /api/run/predict as fallback
     
     # Extract model path from various URL formats (for fallback to Router API)
     model_path = None
@@ -50,16 +62,47 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
     elif "api-inference.huggingface.co" in url:
         model_path = url.split("models/")[-1] if "models/" in url else url.split("/")[-1]
     elif is_space_api:
-        # Extract model name from Space URL (e.g., bisharababish-arabert-toxic-classifier)
-        # Convert Space name to model path: bisharababish-arabert-toxic-classifier -> bisharababish/arabert-toxic-classifier
-        space_name = url.split("hf.space")[0].split("//")[-1].split(".")[0]
-        # Convert hyphenated space name to model path format
-        if "-" in space_name:
-            parts = space_name.split("-", 1)  # Split on first hyphen
-            model_path = f"{parts[0]}/{parts[1]}" if len(parts) == 2 else space_name.replace("-", "/")
-        else:
-            model_path = space_name
-        print(f"🔄 Converted Space name '{space_name}' to model path: {model_path}")
+        # Extract model name from Space URL (e.g., https://bisharababish-arabert-toxic-classifier.hf.space/api/predict)
+        # Space URL format: https://{username}-{space-name}.hf.space/api/predict
+        # Model path format: {username}/{space-name}
+        try:
+            # Extract the subdomain part before .hf.space
+            # For: https://bisharababish-arabert-toxic-classifier.hf.space/api/predict
+            # We want: bisharababish-arabert-toxic-classifier
+            if "hf.space" in url:
+                # Get the part before .hf.space
+                before_space = url.split(".hf.space")[0]
+                # Extract the subdomain (last part after //)
+                if "//" in before_space:
+                    subdomain = before_space.split("//")[-1]
+                    # Remove any path parts if present
+                    if "/" in subdomain:
+                        subdomain = subdomain.split("/")[0]
+                    space_name = subdomain
+                else:
+                    space_name = before_space
+                
+                # Convert hyphenated space name to model path format
+                # bisharababish-arabert-toxic-classifier -> bisharababish/arabert-toxic-classifier
+                if "-" in space_name:
+                    # Split on first hyphen to separate username from space name
+                    parts = space_name.split("-", 1)
+                    if len(parts) == 2:
+                        model_path = f"{parts[0]}/{parts[1]}"
+                    else:
+                        # Fallback: replace all hyphens with slashes
+                        model_path = space_name.replace("-", "/")
+                else:
+                    model_path = space_name
+                print(f"🔄 Extracted Space name '{space_name}' from URL, converted to model path: {model_path}")
+            else:
+                raise ValueError("Invalid Space URL format")
+        except Exception as e:
+            print(f"⚠️ Error extracting model path from Space URL: {e}")
+            print(f"   URL: {url}")
+            # Fallback to default model path
+            model_path = "bisharababish/arabert-toxic-classifier"
+            print(f"   Using fallback model path: {model_path}")
     
     if not model_path:
         print(f"⚠️ Could not extract model path from URL: {url}")
@@ -120,19 +163,53 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         headers=headers
                     )
                 
-                # Handle 404 or 410 - try Router API as fallback
-                # For Space API 404, the Space might be sleeping - retry once with longer wait
-                if (r.status_code == 404 or r.status_code == 410) and i == 0:
+                # Handle 404, 405, or 410 - try alternative endpoints or Router API as fallback
+                # 405 = Method Not Allowed (Space API not configured correctly)
+                # 404 = Space sleeping or not found
+                # 410 = Deprecated endpoint
+                if (r.status_code == 404 or r.status_code == 405 or r.status_code == 410) and i == 0:
                     if is_space_api:
-                        print(f"⚠️ Space API returned {r.status_code} - Space may be sleeping or not running")
-                        print(f"   Error response: {r.text[:200]}")
+                        if r.status_code == 405:
+                            print(f"⚠️ Space API returned 405 (Method Not Allowed)")
+                            print(f"   Trying alternative endpoint format: /api/run/predict")
+                            # Try /api/run/predict as alternative (some Gradio versions use this)
+                            base_url = url.split("/api/")[0] if "/api/" in url else url.rstrip("/")
+                            alt_url = base_url + "/api/run/predict"
+                            print(f"🔄 Trying alternative Space API URL: {alt_url}")
+                            try:
+                                alt_r = await client.post(
+                                    alt_url,
+                                    json={"data": [text]},
+                                    headers=headers
+                                )
+                                if alt_r.status_code == 200:
+                                    print(f"✅ Alternative endpoint works! Using: {alt_url}")
+                                    url = alt_url
+                                    r = alt_r
+                                else:
+                                    print(f"❌ Alternative endpoint also failed: {alt_r.status_code}")
+                                    print(f"   Error: {alt_r.text[:200]}")
+                                    print(f"   💡 The Space API endpoint is not working correctly")
+                                    print(f"   💡 Consider using Router API or fixing the Space app")
+                            except Exception as alt_err:
+                                print(f"❌ Alternative endpoint failed: {alt_err}")
+                                print(f"   Space URL: {url}")
+                                print(f"   Error: {r.text[:200]}")
+                                print(f"   💡 Solution: The Space API endpoint needs to be fixed")
+                                print(f"   💡 Or use Router API: https://router.huggingface.co/v1/models/bisharababish/arabert-toxic-classifier")
+                        else:
+                            print(f"⚠️ Space API returned {r.status_code} - Space may be sleeping or not running")
+                            print(f"   Space URL: {url}")
+                            print(f"   Error response: {r.text[:200]}")
+                            print(f"   Note: Free Hugging Face Spaces sleep after ~1 hour of inactivity")
+                            print(f"   The Space needs to be woken up, which can take 30-90 seconds")
                         # Free Spaces can sleep - try multiple times with increasing wait times
                         max_retries = 3
-                        wait_times = [20, 30, 40]  # Progressive wait times
+                        wait_times = [30, 45, 60]  # Increased wait times for Space wake-up (can take up to 90s)
                         r_retry = None
                         for retry_num in range(max_retries):
                             wait_time = wait_times[retry_num]
-                            print(f"🔄 Space might be sleeping, attempt {retry_num + 1}/{max_retries}, waiting {wait_time}s and retrying Space API...")
+                            print(f"🔄 Attempting to wake up Space, attempt {retry_num + 1}/{max_retries}, waiting {wait_time}s...")
                             await asyncio.sleep(wait_time)
                             retry_request_data = {"data": [text]}
                             r_retry = await client.post(
@@ -208,17 +285,26 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                                 print(f"❌ All API fallbacks failed. Original Space API error: {r.status_code}")
                                 print(f"   Router API error: {router_err}")
                                 print(f"   Model path tried: {model_path}")
-                                raise Exception(f"All Hugging Face APIs failed. Space API: 404 (may be sleeping), Router API: {router_err}. Please verify the Space is running or the model exists on Hugging Face.") from router_err
-                                # Inference API is deprecated (returns 410) - don't try it
-                                print(f"⚠️ Inference API is deprecated - skipping fallback")
-                                print(f"❌ All API fallbacks failed. Original Space API error: {r.status_code}")
-                                print(f"   Router API error: {router_err}")
-                                print(f"   Model path tried: {model_path}")
+                                print(f"   Space URL: {url}")
                                 print(f"   Possible issues:")
-                                print(f"     1. Model '{model_path}' doesn't exist on Hugging Face")
-                                print(f"     2. Model is private and requires authentication")
-                                print(f"     3. Space '{url}' doesn't exist or isn't running")
-                                raise Exception(f"All Hugging Face APIs failed. Space API: 404, Router API: 404 (model '{model_path}' not found). Please verify the model exists on Hugging Face or update IBTIKAR_URL to point to a valid model/Space.") from router_err
+                                print(f"     1. Space '{url}' is sleeping (free Spaces sleep after inactivity)")
+                                print(f"     2. Model '{model_path}' doesn't exist on Hugging Face")
+                                print(f"     3. Model is private and requires authentication (check HF_TOKEN)")
+                                print(f"     4. Space URL format might be incorrect")
+                                
+                                # Provide helpful error message
+                                space_url_for_browser = url.replace("/api/predict", "") if "/api/predict" in url else url
+                                error_msg = (
+                                    f"All Hugging Face APIs failed. "
+                                    f"Space API: 404 (may be sleeping - free Spaces sleep after ~1 hour of inactivity). "
+                                    f"Router API: {router_err}. "
+                                    f"Troubleshooting steps: "
+                                    f"(1) Wake up the Space by visiting {space_url_for_browser} in your browser and wait 30-60 seconds, "
+                                    f"(2) Verify the model '{model_path}' exists at https://huggingface.co/{model_path}, "
+                                    f"(3) Check that IBTIKAR_URL is correctly set to: {url}, "
+                                    f"(4) If using a private model, ensure HF_TOKEN is set correctly"
+                                )
+                                raise Exception(error_msg) from router_err
                     else:
                         # Router API fallback for non-Space API URLs
                         print(f"⚠️ API returned {r.status_code}, trying Router API as fallback...")
@@ -272,8 +358,8 @@ async def _call_huggingface_api(texts: List[str], url: str) -> List[Dict]:
                         f"Check if the Space is running and accessible."
                     )
                 
-                # If still 404/410 after Router API attempt, provide helpful error
-                if (r.status_code == 404 or r.status_code == 410):
+                # If still 404/405/410 after Router API attempt, provide helpful error
+                if (r.status_code == 404 or r.status_code == 405 or r.status_code == 410):
                     error_text = r.text[:500] if r.text else "No error text"
                     raise Exception(
                         f"HF API HTTP {r.status_code}: Model not found or not accessible. "
@@ -554,6 +640,63 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
     url = settings.IBTIKAR_URL.rstrip("/")
     print(f"✅ IBTIKAR_URL is configured: {url}")
     
+    # If it's a Space URL and gradio-client is available, use it (more reliable)
+    if "hf.space" in url and GRADIO_CLIENT_AVAILABLE:
+        print(f"✅ Using Gradio Client for Space API (more reliable than HTTP)")
+        try:
+            # Remove /api/predict if present, gradio_client handles that
+            space_url = url.split("/api/")[0] if "/api/" in url else url
+            space_url = space_url.rstrip("/")
+            print(f"🔄 Connecting to Space: {space_url}")
+            
+            # Use Gradio Client (synchronous, but we'll run it in executor)
+            def call_gradio_client():
+                client = Client(space_url)
+                results = []
+                for text in texts:
+                    try:
+                        # Call the function - Gradio Client automatically finds the function
+                        # The function name is "predict" (from api_name="predict")
+                        result = client.predict(text, api_name="/predict")
+                        # Result format from classify function: [{"label": "safe", "score": 0.95}]
+                        if isinstance(result, list) and len(result) > 0:
+                            # If nested list, unwrap it
+                            if isinstance(result[0], list):
+                                result = result[0]
+                            # Get first dict from result
+                            if isinstance(result, list) and len(result) > 0:
+                                if isinstance(result[0], dict):
+                                    results.append(result[0])
+                                else:
+                                    results.append({"label": "unknown", "score": 0.5})
+                            else:
+                                results.append({"label": "unknown", "score": 0.5})
+                        elif isinstance(result, dict):
+                            results.append(result)
+                        else:
+                            results.append({"label": "unknown", "score": 0.5})
+                    except Exception as e:
+                        print(f"❌ Gradio Client error for text '{text[:50]}...': {e}")
+                        import traceback
+                        traceback.print_exc()
+                        results.append({"label": "unknown", "score": 0.5})
+                return results
+            
+            # Run in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(None, call_gradio_client)
+            
+            print(f"✅ Gradio Client returned {len(results)} results")
+            return results
+            
+        except Exception as e:
+            print(f"⚠️ Gradio Client failed: {e}")
+            print(f"   Error details: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            print(f"   Falling back to HTTP API...")
+            # Fall through to HTTP API approach
+    
     # If URL is just a model path (like "Bisharababish/arabert-toxic-classifier"),
     # convert it to Router API URL (Inference API is deprecated)
     if not url.startswith("http") and "/" in url and not url.startswith("/"):
@@ -561,6 +704,12 @@ async def analyze_texts(texts: List[str]) -> List[Dict]:
         url = f"https://router.huggingface.co/v1/models/{url}"
         print(f"✅ Using Router API URL: {url}")
         print(f"ℹ️  Router API is the current recommended API (Inference API is deprecated)")
+    # If it's a Space URL, suggest using Router API instead (more reliable)
+    elif "hf.space" in url:
+        print(f"⚠️  Space API detected: {url}")
+        print(f"ℹ️  Note: Space API may have issues (405 errors). Router API is more reliable.")
+        print(f"💡 Consider setting IBTIKAR_URL to: https://router.huggingface.co/v1/models/bisharababish/arabert-toxic-classifier")
+        print(f"   Or just: bisharababish/arabert-toxic-classifier")
     else:
         print(f"✅ Using URL as configured: {url}")
 

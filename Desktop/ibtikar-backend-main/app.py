@@ -206,6 +206,7 @@ def classify(text):
         return [{"label": "unknown", "score": 0.5}]
 
 # Create Gradio interface with API endpoint
+# Using Interface with api_name="predict" to create /api/predict endpoint
 iface = gr.Interface(
     fn=classify,
     inputs=gr.Textbox(
@@ -220,9 +221,16 @@ iface = gr.Interface(
         ["مرحبا بك كيف حالك"],
         ["انت غبي وما تفهم شي"],
     ],
-    api_name="predict"  # This creates the /api/predict endpoint
+    api_name="predict"  # This should create /api/predict endpoint
 )
 
 if __name__ == "__main__":
-    iface.launch(server_name="0.0.0.0", server_port=7860)
-
+    # Launch with API explicitly enabled
+    # The api_name="predict" should create /api/predict endpoint
+    iface.launch(
+        server_name="0.0.0.0", 
+        server_port=7860,
+        share=False,
+        show_error=True,
+        enable_queue=False  # Disable queue for faster API responses
+    )
