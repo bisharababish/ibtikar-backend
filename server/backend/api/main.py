@@ -70,6 +70,46 @@ print("CREATING FASTAPI APP", file=sys.stderr, flush=True)
 app = FastAPI(title="IbtikarAI Backend", version="0.2.0")
 print("FASTAPI APP CREATED", file=sys.stderr, flush=True)
 
+# Add exception handler to debug 404s
+@app.exception_handler(404)
+async def not_found_handler(request, exc):
+    """Debug handler to see what routes are registered"""
+    import sys
+    routes_list = []
+    for route in app.routes:
+        if hasattr(route, 'path'):
+            methods = getattr(route, 'methods', set())
+            routes_list.append(f"{list(methods)} {route.path}")
+    
+    print(f"404 ERROR - Requested path: {request.url.path}", file=sys.stderr, flush=True)
+    print(f"Available routes: {routes_list}", file=sys.stderr, flush=True)
+    
+    # If it's one of our HTML pages, try to return it anyway
+    if request.url.path == "/privacy-policy.html":
+        return HTMLResponse(content="""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Privacy Policy - Ibtikar</title></head>
+<body><h1>Privacy Policy for Ibtikar</h1><p>Last Updated: January 2025</p>
+<p>Ibtikar ("we," "our," or "us") operated by <strong>Ibtikar Development</strong> (Account ID: 8344367188917813700) is committed to protecting your privacy.</p>
+<p><strong>Email:</strong> support@ibtikar.app</p>
+<p><a href="delete-account.html">Request Account Deletion</a></p>
+</body></html>""")
+    if request.url.path == "/delete-account.html":
+        return HTMLResponse(content="""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Delete Account - Ibtikar</title></head>
+<body><h1>Delete Your Ibtikar Account</h1>
+<p>To delete your account, email us at <strong>support@ibtikar.app</strong> with subject "Account Deletion Request".</p>
+<p><strong>Email:</strong> support@ibtikar.app</p>
+<p><a href="privacy-policy.html">View Privacy Policy</a></p>
+</body></html>""")
+    if request.url.path == "/":
+        return HTMLResponse(content="""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Ibtikar Backend API</title></head>
+<body><h1>Ibtikar Backend API</h1><p>Service is running.</p>
+<p><a href="/health">Health Check</a> | <a href="/privacy-policy.html">Privacy Policy</a> | <a href="/delete-account.html">Delete Account</a></p>
+</body></html>""")
+    
+    return {"detail": "Not Found", "requested_path": str(request.url.path), "available_routes": routes_list}
+
 # Define critical routes FIRST before any other setup
 # These routes MUST be defined early to ensure they're registered
 print("REGISTERING ROOT ROUTE", file=sys.stderr, flush=True)
