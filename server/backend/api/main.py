@@ -63,11 +63,22 @@ class AuthorSummaryResponse(BaseModel):
 
 # ---------- FastAPI app and endpoints ----------
 
+# Log that we're creating the app
+import sys
+print("CREATING FASTAPI APP", file=sys.stderr, flush=True)
+
 app = FastAPI(title="IbtikarAI Backend", version="0.2.0")
+print("FASTAPI APP CREATED", file=sys.stderr, flush=True)
 
 # Define critical routes FIRST before any other setup
+# These routes MUST be defined early to ensure they're registered
+print("REGISTERING ROOT ROUTE", file=sys.stderr, flush=True)
 @app.get("/")
 async def root():
+    """Root endpoint - must work for Render health checks"""
+    import sys
+    print("ROOT ENDPOINT CALLED", file=sys.stderr, flush=True)
+    return HTMLResponse(content="""
     """Root endpoint"""
     return HTMLResponse(content="""
     <!DOCTYPE html>
@@ -113,9 +124,12 @@ async def root():
     </html>
     """)
 
+print("REGISTERING PRIVACY POLICY ROUTE", file=sys.stderr, flush=True)
 @app.get("/privacy-policy.html")
 async def privacy_policy():
     """Privacy Policy page for Google Play Console"""
+    import sys
+    print("PRIVACY POLICY ENDPOINT CALLED", file=sys.stderr, flush=True)
     # Return embedded HTML content - always works
     return HTMLResponse(content="""<!DOCTYPE html>
 <html lang="en">
@@ -176,9 +190,12 @@ async def privacy_policy():
 </body>
 </html>""")
 
+print("REGISTERING DELETE ACCOUNT ROUTE", file=sys.stderr, flush=True)
 @app.get("/delete-account.html")
 async def delete_account():
     """Delete Account page for Google Play Console"""
+    import sys
+    print("DELETE ACCOUNT ENDPOINT CALLED", file=sys.stderr, flush=True)
     # Return embedded HTML content - always works
     return HTMLResponse(content="""<!DOCTYPE html>
 <html lang="en">
@@ -244,7 +261,13 @@ async def delete_account():
 </body>
 </html>""")
 
-init_db()  # create tables on startup (local dev)
+# Wrap init_db in try/except to prevent import errors from blocking route registration
+try:
+    init_db()  # create tables on startup (local dev)
+except Exception as e:
+    import sys
+    print(f"WARNING: init_db() failed: {e}", file=sys.stderr, flush=True)
+    # Don't fail the entire app if DB init fails
 
 # ---------- Static files for Play Console documentation ----------
 # Get the path to the static directory (server/static)
