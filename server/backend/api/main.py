@@ -64,6 +64,186 @@ class AuthorSummaryResponse(BaseModel):
 # ---------- FastAPI app and endpoints ----------
 
 app = FastAPI(title="IbtikarAI Backend", version="0.2.0")
+
+# Define critical routes FIRST before any other setup
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return HTMLResponse(content="""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Ibtikar Backend API</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+            .container {
+                text-align: center;
+                padding: 40px;
+                background: rgba(0, 0, 0, 0.3);
+                border-radius: 20px;
+                max-width: 600px;
+            }
+            h1 { margin-bottom: 20px; }
+            a { color: #F6DE55; text-decoration: none; margin: 0 10px; }
+            a:hover { text-decoration: underline; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Ibtikar Backend API</h1>
+            <p>Service is running successfully.</p>
+            <p style="margin-top: 30px;">
+                <a href="/health">Health Check</a> |
+                <a href="/privacy-policy.html">Privacy Policy</a> |
+                <a href="/delete-account.html">Delete Account</a>
+            </p>
+        </div>
+    </body>
+    </html>
+    """)
+
+@app.get("/privacy-policy.html")
+async def privacy_policy():
+    """Privacy Policy page for Google Play Console"""
+    # Return embedded HTML content - always works
+    return HTMLResponse(content="""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Ibtikar</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+            background-color: #FAFAFA;
+        }
+        h1 {
+            color: #00A3A3;
+            border-bottom: 3px solid #F6DE55;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #00A3A3;
+            margin-top: 30px;
+        }
+        .contact {
+            background-color: #FFFFFF;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #00A3A3;
+            margin-top: 30px;
+        }
+        a {
+            color: #00A3A3;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>Privacy Policy for Ibtikar</h1>
+    <p>Last Updated: January 2025</p>
+    <p>Ibtikar ("we," "our," or "us") operated by <strong>Ibtikar Development</strong> (Account ID: 8344367188917813700) is committed to protecting your privacy.</p>
+    <p>This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application Ibtikar.</p>
+    <h2>Contact Us</h2>
+    <div class="contact">
+        <p><strong>Developer:</strong> Ibtikar Development</p>
+        <p><strong>Account ID:</strong> 8344367188917813700</p>
+        <p><strong>Email:</strong> support@ibtikar.app</p>
+    </div>
+    <p style="margin-top: 40px; text-align: center;">
+        <a href="delete-account.html">Request Account Deletion</a> | 
+        <a href="/">Back to App</a>
+    </p>
+</body>
+</html>""")
+
+@app.get("/delete-account.html")
+async def delete_account():
+    """Delete Account page for Google Play Console"""
+    # Return embedded HTML content - always works
+    return HTMLResponse(content="""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Account - Ibtikar</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+            background-color: #FAFAFA;
+        }
+        h1 {
+            color: #D90000;
+            border-bottom: 3px solid #F6DE55;
+            padding-bottom: 10px;
+        }
+        .warning {
+            background-color: #FFF3CD;
+            border: 2px solid #FFC107;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .contact {
+            background-color: #FFFFFF;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #00A3A3;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Delete Your Ibtikar Account</h1>
+    <div class="warning">
+        <strong>⚠️ Important:</strong> Deleting your account is <strong>permanent and irreversible</strong>.
+    </div>
+    <h2>How to Delete Your Account</h2>
+    <ol>
+        <li>Open the Ibtikar app on your device</li>
+        <li>Navigate to your profile</li>
+        <li>Tap "Logout"</li>
+        <li>Email us at <strong>support@ibtikar.app</strong> with subject "Account Deletion Request" and include your Twitter/X username</li>
+    </ol>
+    <h2>What Gets Deleted</h2>
+    <p>All account data, analyzed posts, OAuth tokens, and analysis results will be permanently removed.</p>
+    <div class="contact">
+        <p><strong>Email:</strong> support@ibtikar.app</p>
+        <p><strong>Subject:</strong> Account Deletion Request</p>
+        <p><strong>Developer:</strong> Ibtikar Development</p>
+        <p><strong>Account ID:</strong> 8344367188917813700</p>
+    </div>
+    <p style="margin-top: 40px; text-align: center;">
+        <a href="privacy-policy.html">View Privacy Policy</a> |
+        <a href="mailto:support@ibtikar.app?subject=Account%20Deletion%20Request">Contact Support</a>
+    </p>
+</body>
+</html>""")
+
 init_db()  # create tables on startup (local dev)
 
 # ---------- Static files for Play Console documentation ----------
@@ -163,6 +343,21 @@ _load_html_content()
 @app.on_event("startup")
 async def startup_event():
     """Log startup information and verify routes"""
+    import sys
+    # Use print to ensure it shows up in logs
+    print("=" * 80, file=sys.stderr)
+    print("Ibtikar Backend API Starting", file=sys.stderr)
+    print(f"Current working directory: {os.getcwd()}", file=sys.stderr)
+    print(f"__file__ location: {__file__}", file=sys.stderr)
+    print(f"Static directory: {static_dir}", file=sys.stderr)
+    print(f"Privacy policy HTML loaded: {_privacy_policy_html is not None}", file=sys.stderr)
+    print(f"Delete account HTML loaded: {_delete_account_html is not None}", file=sys.stderr)
+    # List all registered routes
+    print("Registered routes:", file=sys.stderr)
+    for route in app.routes:
+        if hasattr(route, 'path') and hasattr(route, 'methods'):
+            print(f"  {list(route.methods)} {route.path}", file=sys.stderr)
+    print("=" * 80, file=sys.stderr)
     logger.info("=" * 80)
     logger.info("Ibtikar Backend API Starting")
     logger.info(f"Current working directory: {os.getcwd()}")
@@ -172,66 +367,7 @@ async def startup_event():
     logger.info(f"Delete account HTML loaded: {_delete_account_html is not None}")
     logger.info("=" * 80)
 
-# Direct routes for easy access (for Play Console)
-# These routes embed HTML directly to ensure they always work on Render
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    """Root endpoint - redirects to health check"""
-    return HTMLResponse(content="""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Ibtikar Backend API</title>
-        <style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                min-height: 100vh;
-                margin: 0;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-            }
-            .container {
-                text-align: center;
-                padding: 40px;
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 20px;
-                max-width: 600px;
-            }
-            h1 { margin-bottom: 20px; }
-            a { color: #F6DE55; text-decoration: none; margin: 0 10px; }
-            a:hover { text-decoration: underline; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>Ibtikar Backend API</h1>
-            <p>Service is running successfully.</p>
-            <p style="margin-top: 30px;">
-                <a href="/health">Health Check</a> |
-                <a href="/privacy-policy.html">Privacy Policy</a> |
-                <a href="/delete-account.html">Delete Account</a>
-            </p>
-        </div>
-    </body>
-    </html>
-    """)
-
-@app.get("/privacy-policy.html", response_class=HTMLResponse)
-async def privacy_policy():
-    """Privacy Policy page for Google Play Console"""
-    # Always use cached content if available (loaded at startup)
-    if _privacy_policy_html:
-        logger.info("Serving privacy-policy.html from cached content")
-        return HTMLResponse(content=_privacy_policy_html)
-    
-    # Fallback: return embedded HTML content
-    logger.warning("Serving privacy-policy.html from embedded fallback")
-    return HTMLResponse(content="""<!DOCTYPE html>
+# Routes are already defined at the top of the file - no duplicates needed
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -386,203 +522,7 @@ async def privacy_policy():
 </body>
 </html>""")
 
-@app.get("/delete-account.html", response_class=HTMLResponse)
-async def delete_account():
-    """Delete Account page for Google Play Console"""
-    # Always use cached content if available (loaded at startup)
-    if _delete_account_html:
-        logger.info("Serving delete-account.html from cached content")
-        return HTMLResponse(content=_delete_account_html)
-    
-    # Fallback: return embedded HTML content
-    logger.warning("Serving delete-account.html from embedded fallback")
-    return HTMLResponse(content="""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Delete Account - Ibtikar</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            color: #333;
-            background-color: #FAFAFA;
-        }
-        h1 {
-            color: #D90000;
-            border-bottom: 3px solid #F6DE55;
-            padding-bottom: 10px;
-        }
-        h2 {
-            color: #00A3A3;
-            margin-top: 30px;
-        }
-        .warning {
-            background-color: #FFF3CD;
-            border: 2px solid #FFC107;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        .steps {
-            background-color: #FFFFFF;
-            border: 2px solid #00A3A3;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        .steps ol {
-            padding-left: 20px;
-        }
-        .steps li {
-            margin: 10px 0;
-        }
-        .data-list {
-            background-color: #E8F5E9;
-            border-left: 4px solid #38B000;
-            padding: 15px;
-            margin: 15px 0;
-        }
-        .contact {
-            background-color: #FFFFFF;
-            padding: 20px;
-            border-radius: 8px;
-            border: 2px solid #00A3A3;
-            margin-top: 30px;
-        }
-        .button {
-            display: inline-block;
-            background-color: #D90000;
-            color: white;
-            padding: 12px 24px;
-            text-decoration: none;
-            border-radius: 8px;
-            margin-top: 20px;
-            font-weight: bold;
-        }
-        .button:hover {
-            background-color: #B80000;
-        }
-        .info-box {
-            background-color: #E3F2FD;
-            border-left: 4px solid #2196F3;
-            padding: 15px;
-            margin: 15px 0;
-        }
-    </style>
-</head>
-<body>
-    <h1>Delete Your Ibtikar Account</h1>
-    <p>This page explains how to delete your Ibtikar account and all associated data. This process is permanent and cannot be undone.</p>
-
-    <div class="warning">
-        <strong>⚠️ Important Warning:</strong> Deleting your account is <strong>permanent and irreversible</strong>. All your data will be permanently deleted and cannot be recovered. Please read this page carefully before proceeding.
-    </div>
-
-    <h2>How to Delete Your Account</h2>
-    <div class="steps">
-        <ol>
-            <li><strong>Open the Ibtikar app</strong> on your Android or iOS device</li>
-            <li><strong>Navigate to your profile</strong> or main screen</li>
-            <li><strong>Find the "Logout" button</strong> (typically located in the top-right corner with a logout icon)</li>
-            <li><strong>Tap "Logout"</strong> - This will log you out and clear your local app data</li>
-            <li><strong>Contact us to complete deletion</strong> - To permanently delete your account data from our servers, please email us at <strong>support@ibtikar.app</strong> with the subject "Account Deletion Request" and include your Twitter/X username</li>
-        </ol>
-    </div>
-
-    <div class="info-box">
-        <p><strong>Note:</strong> Currently, account deletion from our servers requires manual processing. We are working on implementing an automated account deletion feature within the app. In the meantime, please contact us via email to request account deletion.</p>
-    </div>
-
-    <h2>What Gets Deleted</h2>
-    <div class="data-list">
-        <p>When you delete your account, the following data will be <strong>permanently removed</strong> from our systems:</p>
-        <ul>
-            <li><strong>Account Information:</strong> Your Ibtikar user account, Twitter/X user ID, username, display name, and profile image URL</li>
-            <li><strong>Authentication Data:</strong> All Twitter/X OAuth tokens (encrypted) and connection information</li>
-            <li><strong>Content Data:</strong> All analyzed posts, tweets, post content, metadata, and language classifications</li>
-            <li><strong>Analysis Results:</strong> All AI classification results (harmful/safe/unknown labels), confidence scores, and aggregate statistics</li>
-            <li><strong>App Data:</strong> Your activation status, preferences, settings, and error logs</li>
-        </ul>
-    </div>
-
-    <h2>Data Retention Period</h2>
-    <p><strong>Deletion Timeline:</strong></p>
-    <ul>
-        <li><strong>Immediate:</strong> Your account data is deleted immediately from our active databases upon confirmation</li>
-        <li><strong>Within 30 Days:</strong> All backup copies are permanently deleted</li>
-        <li><strong>No Retention:</strong> We do not retain any of your data after deletion</li>
-        <li><strong>No Recovery:</strong> Once deleted, your data cannot be recovered or restored</li>
-    </ul>
-
-    <h2>What Happens After Deletion</h2>
-    <ul>
-        <li><strong>App Access:</strong> You will no longer be able to log in to the Ibtikar app with your account</li>
-        <li><strong>Data Removal:</strong> All your analyzed posts, classifications, and data will be permanently removed</li>
-        <li><strong>Twitter/X Account:</strong> Your Twitter/X account will remain unchanged - we only remove our access to it</li>
-        <li><strong>OAuth Connection:</strong> The connection between Ibtikar and your Twitter/X account will be severed</li>
-        <li><strong>New Account:</strong> You can create a new Ibtikar account at any time, but your previous data will not be restored</li>
-    </ul>
-
-    <h2>Alternative: Revoke Twitter/X Access Only</h2>
-    <p>If you only want to disconnect your Twitter/X account without deleting your Ibtikar account data:</p>
-    <div class="steps">
-        <ol>
-            <li>Go to your Twitter/X account on the web or mobile app</li>
-            <li>Navigate to <strong>Settings and privacy</strong> → <strong>Security and account access</strong> → <strong>Apps and sessions</strong> → <strong>Connected apps</strong></li>
-            <li>Find <strong>"Ibtikar"</strong> in the list of connected apps</li>
-            <li>Click <strong>"Revoke access"</strong> or <strong>"Disconnect"</strong></li>
-            <li>Confirm the disconnection</li>
-        </ol>
-    </div>
-    <p><strong>Note:</strong> Revoking Twitter/X access will prevent the app from functioning, but your Ibtikar account data will remain stored. To fully delete your account, follow the deletion process above.</p>
-
-    <h2>Data Deletion Under GDPR and CCPA</h2>
-    <p>If you are located in the European Economic Area (EEA) or California, you have the right to request deletion of your personal data under GDPR (Article 17) or CCPA. We will honor these requests and delete your data as described above.</p>
-    <p>To exercise your right to deletion, please contact us at <strong>support@ibtikar.app</strong> with:</p>
-    <ul>
-        <li>Subject line: "GDPR/CCPA Deletion Request" or "Account Deletion Request"</li>
-        <li>Your Twitter/X username</li>
-        <li>Confirmation that you want to delete your account</li>
-    </ul>
-    <p>We will process your request within 30 days as required by law.</p>
-
-    <h2>Need Help?</h2>
-    <div class="contact">
-        <p>If you need assistance deleting your account, have questions about the deletion process, or want to verify that your account has been deleted, please contact us:</p>
-        <p><strong>Email:</strong> support@ibtikar.app</p>
-        <p><strong>Subject:</strong> Account Deletion Request</p>
-        <p><strong>App Name:</strong> Ibtikar</p>
-        <p><strong>Developer:</strong> Ibtikar Development</p>
-        <p><strong>Account ID:</strong> 8344367188917813700</p>
-        <p style="margin-top: 15px;"><strong>Response Time:</strong> We aim to respond to deletion requests within 48 hours and complete deletion within 7 business days.</p>
-    </div>
-
-    <h2>Before You Delete</h2>
-    <div class="info-box">
-        <p><strong>Consider the following before deleting your account:</strong></p>
-        <ul>
-            <li>Make sure you have exported or saved any data you want to keep (if export features are available)</li>
-            <li>Understand that deletion is permanent and cannot be undone</li>
-            <li>If you're having issues with the app, consider contacting support first - we may be able to help</li>
-            <li>You can always revoke Twitter/X access first to stop data collection without deleting your account</li>
-        </ul>
-    </div>
-
-    <p style="margin-top: 40px; text-align: center;">
-        <a href="privacy-policy.html" class="button" style="background-color: #00A3A3; margin-right: 10px;">View Privacy Policy</a>
-        <a href="mailto:support@ibtikar.app?subject=Account%20Deletion%20Request" class="button">Contact Support</a>
-    </p>
-
-    <p style="text-align: center; margin-top: 20px; color: #666;">
-        <small>Last Updated: January 2025</small>
-    </p>
-</body>
-</html>""")
+# Duplicate route removed - already defined at top of file
 
 @app.get("/test")
 async def test_endpoint():
