@@ -159,6 +159,19 @@ def _load_html_content():
 # Load HTML content at module import
 _load_html_content()
 
+# Add startup event to log route registration
+@app.on_event("startup")
+async def startup_event():
+    """Log startup information and verify routes"""
+    logger.info("=" * 80)
+    logger.info("Ibtikar Backend API Starting")
+    logger.info(f"Current working directory: {os.getcwd()}")
+    logger.info(f"__file__ location: {__file__}")
+    logger.info(f"Static directory: {static_dir}")
+    logger.info(f"Privacy policy HTML loaded: {_privacy_policy_html is not None}")
+    logger.info(f"Delete account HTML loaded: {_delete_account_html is not None}")
+    logger.info("=" * 80)
+
 # Direct routes for easy access (for Play Console)
 # These routes embed HTML directly to ensure they always work on Render
 @app.get("/", response_class=HTMLResponse)
@@ -211,25 +224,13 @@ async def root():
 @app.get("/privacy-policy.html", response_class=HTMLResponse)
 async def privacy_policy():
     """Privacy Policy page for Google Play Console"""
-    # Use cached content if available
+    # Always use cached content if available (loaded at startup)
     if _privacy_policy_html:
+        logger.info("Serving privacy-policy.html from cached content")
         return HTMLResponse(content=_privacy_policy_html)
     
-    # Try to read from file as fallback
-    possible_files = [
-        static_dir / "privacy-policy.html",
-        Path(os.getcwd()) / "server" / "static" / "privacy-policy.html",
-        Path(os.getcwd()) / "static" / "privacy-policy.html",
-        Path(__file__).parent.parent.parent / "static" / "privacy-policy.html",
-    ]
-    
-    for file_path in possible_files:
-        if file_path.exists():
-            logger.info(f"Serving privacy-policy.html from: {file_path.absolute()}")
-            return FileResponse(file_path, media_type="text/html")
-    
-    # Final fallback: return embedded HTML content (simplified version)
-    logger.warning(f"Privacy policy file not found, serving embedded content. Tried: {[str(p) for p in possible_files]}")
+    # Fallback: return embedded HTML content
+    logger.warning("Serving privacy-policy.html from embedded fallback")
     return HTMLResponse(content="""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -388,25 +389,13 @@ async def privacy_policy():
 @app.get("/delete-account.html", response_class=HTMLResponse)
 async def delete_account():
     """Delete Account page for Google Play Console"""
-    # Use cached content if available
+    # Always use cached content if available (loaded at startup)
     if _delete_account_html:
+        logger.info("Serving delete-account.html from cached content")
         return HTMLResponse(content=_delete_account_html)
     
-    # Try to read from file as fallback
-    possible_files = [
-        static_dir / "delete-account.html",
-        Path(os.getcwd()) / "server" / "static" / "delete-account.html",
-        Path(os.getcwd()) / "static" / "delete-account.html",
-        Path(__file__).parent.parent.parent / "static" / "delete-account.html",
-    ]
-    
-    for file_path in possible_files:
-        if file_path.exists():
-            logger.info(f"Serving delete-account.html from: {file_path.absolute()}")
-            return FileResponse(file_path, media_type="text/html")
-    
-    # Final fallback: return embedded HTML content (simplified version)
-    logger.warning(f"Delete account file not found, serving embedded content. Tried: {[str(p) for p in possible_files]}")
+    # Fallback: return embedded HTML content
+    logger.warning("Serving delete-account.html from embedded fallback")
     return HTMLResponse(content="""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -594,6 +583,20 @@ async def delete_account():
     </p>
 </body>
 </html>""")
+
+@app.get("/test")
+async def test_endpoint():
+    """Simple test endpoint to verify the app is working"""
+    return {
+        "status": "ok",
+        "message": "API is working",
+        "routes": {
+            "root": "/",
+            "privacy_policy": "/privacy-policy.html",
+            "delete_account": "/delete-account.html",
+            "health": "/health"
+        }
+    }
 
 @app.get("/debug/static-paths")
 async def debug_static_paths():
