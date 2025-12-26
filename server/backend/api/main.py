@@ -4,8 +4,7 @@ import time
 from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
+from starlette.requests import Request
 from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
@@ -73,25 +72,26 @@ app = FastAPI(title="IbtikarAI Backend", version="0.2.0")
 print("FASTAPI APP CREATED", file=sys.stderr, flush=True)
 
 # Add middleware to catch HTML page requests BEFORE routing
-class HTMLPageMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: StarletteRequest, call_next):
-        path = request.url.path
-        print(f"MIDDLEWARE: Request to {path}", file=sys.stderr, flush=True)
-        
-        # Serve HTML pages directly from middleware if routes fail
-        if path == "/privacy-policy.html":
-            print("MIDDLEWARE: Serving privacy-policy.html", file=sys.stderr, flush=True)
-            return HTMLResponse(content="""<!DOCTYPE html>
+# Using decorator-based middleware for maximum reliability
+@app.middleware("http")
+async def html_page_middleware(request: Request, call_next):
+    path = request.url.path
+    print(f"MIDDLEWARE: Request to {path}", file=sys.stderr, flush=True)
+    
+    # Serve HTML pages directly from middleware - this runs BEFORE any routes
+    if path == "/privacy-policy.html":
+        print("MIDDLEWARE: Serving privacy-policy.html", file=sys.stderr, flush=True)
+        return HTMLResponse(content="""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Privacy Policy - Ibtikar</title></head>
 <body><h1>Privacy Policy for Ibtikar</h1><p>Last Updated: January 2025</p>
 <p>Ibtikar ("we," "our," or "us") operated by <strong>Ibtikar Development</strong> (Account ID: 8344367188917813700) is committed to protecting your privacy.</p>
 <p><strong>Email:</strong> support@ibtikar.app</p>
 <p><a href="delete-account.html">Request Account Deletion</a></p>
 </body></html>""")
-        
-        if path == "/delete-account.html":
-            print("MIDDLEWARE: Serving delete-account.html", file=sys.stderr, flush=True)
-            return HTMLResponse(content="""<!DOCTYPE html>
+    
+    if path == "/delete-account.html":
+        print("MIDDLEWARE: Serving delete-account.html", file=sys.stderr, flush=True)
+        return HTMLResponse(content="""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -162,20 +162,18 @@ class HTMLPageMiddleware(BaseHTTPMiddleware):
     </p>
 </body>
 </html>""")
-        
-        if path == "/":
-            print("MIDDLEWARE: Serving root", file=sys.stderr, flush=True)
-            return HTMLResponse(content="""<!DOCTYPE html>
+    
+    if path == "/":
+        print("MIDDLEWARE: Serving root", file=sys.stderr, flush=True)
+        return HTMLResponse(content="""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Ibtikar Backend API</title></head>
 <body><h1>Ibtikar Backend API</h1><p>Service is running.</p>
 <p><a href="/health">Health Check</a> | <a href="/privacy-policy.html">Privacy Policy</a> | <a href="/delete-account.html">Delete Account</a></p>
 </body></html>""")
-        
-        # Let other requests pass through
-        response = await call_next(request)
-        return response
-
-app.add_middleware(HTMLPageMiddleware)
+    
+    # Let other requests pass through
+    response = await call_next(request)
+    return response
 
 # Define critical routes FIRST before any other setup
 # These routes MUST be defined early to ensure they're registered
