@@ -302,10 +302,10 @@ async def privacy_policy():
 print("REGISTERING DELETE ACCOUNT ROUTE", file=sys.stderr, flush=True)
 @app.get("/delete-account.html")
 async def delete_account():
-    """Delete Account page for Google Play Console"""
+    """Delete Account page for Google Play Console - Must meet Play Console requirements"""
     import sys
     print("DELETE ACCOUNT ENDPOINT CALLED", file=sys.stderr, flush=True)
-    # Return embedded HTML content - always works
+    # Return embedded HTML content - Google Play Console compliant
     return HTMLResponse(content="""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -313,59 +313,89 @@ async def delete_account():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Delete Account - Ibtikar</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.6;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            color: #333;
-            background-color: #FAFAFA;
-        }
-        h1 {
-            color: #D90000;
-            border-bottom: 3px solid #F6DE55;
-            padding-bottom: 10px;
-        }
-        .warning {
-            background-color: #FFF3CD;
-            border: 2px solid #FFC107;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        .contact {
-            background-color: #FFFFFF;
-            padding: 20px;
-            border-radius: 8px;
-            border: 2px solid #00A3A3;
-            margin-top: 30px;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; background-color: #FAFAFA; }
+        h1 { color: #D90000; border-bottom: 3px solid #F6DE55; padding-bottom: 10px; }
+        h2 { color: #00A3A3; margin-top: 30px; }
+        .app-info { background-color: #E3F2FD; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0; font-size: 18px; }
+        .warning { background-color: #FFF3CD; border: 2px solid #FFC107; border-radius: 8px; padding: 15px; margin: 20px 0; }
+        .steps { background-color: #FFFFFF; border: 2px solid #00A3A3; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .steps ol { padding-left: 20px; }
+        .steps li { margin: 10px 0; font-size: 16px; }
+        .data-list { background-color: #E8F5E9; border-left: 4px solid #38B000; padding: 15px; margin: 15px 0; }
+        .contact { background-color: #FFFFFF; padding: 20px; border-radius: 8px; border: 2px solid #00A3A3; margin-top: 30px; }
+        strong { color: #D90000; }
+        .button { display: inline-block; background-color: #D90000; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; margin: 10px 5px; font-weight: bold; }
+        .button:hover { background-color: #B80000; }
     </style>
 </head>
 <body>
-    <h1>Delete Your Ibtikar Account</h1>
-    <div class="warning">
-        <strong>⚠️ Important:</strong> Deleting your account is <strong>permanent and irreversible</strong>.
-    </div>
-    <h2>How to Delete Your Account</h2>
-    <ol>
-        <li>Open the Ibtikar app on your device</li>
-        <li>Navigate to your profile</li>
-        <li>Tap "Logout"</li>
-        <li>Email us at <strong>support@ibtikar.app</strong> with subject "Account Deletion Request" and include your Twitter/X username</li>
-    </ol>
-    <h2>What Gets Deleted</h2>
-    <p>All account data, analyzed posts, OAuth tokens, and analysis results will be permanently removed.</p>
-    <div class="contact">
-        <p><strong>Email:</strong> support@ibtikar.app</p>
-        <p><strong>Subject:</strong> Account Deletion Request</p>
+    <div class="app-info">
+        <p><strong>App Name:</strong> Ibtikar</p>
         <p><strong>Developer:</strong> Ibtikar Development</p>
-        <p><strong>Account ID:</strong> 8344367188917813700</p>
     </div>
+
+    <h1>Delete Your Ibtikar Account</h1>
+    <p>This page explains how to delete your <strong>Ibtikar</strong> account and all associated data. This process is permanent and cannot be undone.</p>
+
+    <div class="warning">
+        <strong>⚠️ Important Warning:</strong> Deleting your <strong>Ibtikar</strong> account is <strong>permanent and irreversible</strong>. All your data will be permanently deleted and cannot be recovered. Please read this page carefully before proceeding.
+    </div>
+
+    <h2>How to Request Account Deletion</h2>
+    <div class="steps">
+        <p><strong>Follow these steps to delete your Ibtikar account:</strong></p>
+        <ol>
+            <li><strong>Open the Ibtikar app</strong> on your Android or iOS device</li>
+            <li><strong>Navigate to your profile</strong> or main screen</li>
+            <li><strong>Find the "Logout" button</strong> (typically located in the top-right corner)</li>
+            <li><strong>Tap "Logout"</strong> - This will log you out and clear your local app data</li>
+            <li><strong>Email us at <a href="mailto:support@ibtikar.app?subject=Account%20Deletion%20Request">support@ibtikar.app</a></strong> with the subject line: <strong>"Account Deletion Request"</strong></li>
+            <li><strong>Include your Twitter/X username</strong> in the email</li>
+            <li><strong>Confirm that you want to permanently delete your account</strong></li>
+        </ol>
+        <p style="margin-top: 20px; font-size: 18px;"><strong>Email Address:</strong> <a href="mailto:support@ibtikar.app?subject=Account%20Deletion%20Request" style="color: #D90000; font-weight: bold;">support@ibtikar.app</a></p>
+    </div>
+
+    <h2>Types of Data That Will Be Deleted</h2>
+    <div class="data-list">
+        <p>When you delete your <strong>Ibtikar</strong> account, the following data will be <strong>permanently removed</strong> from our systems:</p>
+        <ul>
+            <li><strong>Account Information:</strong> Your Ibtikar user account, Twitter/X user ID, username, display name, and profile image URL</li>
+            <li><strong>Authentication Data:</strong> All Twitter/X OAuth access tokens (encrypted), refresh tokens (encrypted), and all OAuth connection information</li>
+            <li><strong>Content Data:</strong> All analyzed posts and tweets from your feed, post content, text, metadata, post IDs, author IDs, timestamps, and language classifications</li>
+            <li><strong>Analysis Results:</strong> All AI classification results (harmful/safe/unknown labels), confidence scores for each analysis, analysis timestamps, and aggregate statistics and summaries</li>
+            <li><strong>App Data:</strong> Your activation status and preferences, app settings and configurations, and error logs associated with your account</li>
+        </ul>
+    </div>
+
+    <h2>Data Retention Period</h2>
+    <p><strong>Deletion Timeline:</strong></p>
+    <ul>
+        <li><strong>Immediate:</strong> Your account data is deleted immediately from our active databases upon confirmation of your deletion request</li>
+        <li><strong>Within 30 Days:</strong> All backup copies are permanently deleted</li>
+        <li><strong>No Retention:</strong> We do not retain any of your data after deletion</li>
+        <li><strong>No Recovery:</strong> Once deleted, your data cannot be recovered or restored</li>
+    </ul>
+    <p><strong>Additional Retention Period:</strong> None. All data is permanently deleted within 30 days of your deletion request.</p>
+
+    <h2>Contact Information</h2>
+    <div class="contact">
+        <p>If you need assistance deleting your account, have questions about the deletion process, or want to verify that your account has been deleted, please contact us:</p>
+        <p><strong>App Name:</strong> Ibtikar</p>
+        <p><strong>Developer:</strong> Ibtikar Development</p>
+        <p><strong>Email:</strong> <a href="mailto:support@ibtikar.app?subject=Account%20Deletion%20Request">support@ibtikar.app</a></p>
+        <p><strong>Subject:</strong> Account Deletion Request</p>
+        <p><strong>Account ID:</strong> 8344367188917813700</p>
+        <p style="margin-top: 15px;"><strong>Response Time:</strong> We aim to respond to deletion requests within 48 hours and complete deletion within 7 business days.</p>
+    </div>
+
     <p style="margin-top: 40px; text-align: center;">
-        <a href="privacy-policy.html">View Privacy Policy</a> |
-        <a href="mailto:support@ibtikar.app?subject=Account%20Deletion%20Request">Contact Support</a>
+        <a href="privacy-policy.html" class="button" style="background-color: #00A3A3;">View Privacy Policy</a>
+        <a href="mailto:support@ibtikar.app?subject=Account%20Deletion%20Request" class="button">Contact Support</a>
+    </p>
+
+    <p style="text-align: center; margin-top: 20px; color: #666;">
+        <small>Last Updated: January 2025</small>
     </p>
 </body>
 </html>""")
