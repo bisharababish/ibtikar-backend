@@ -4,6 +4,8 @@ import time
 from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
@@ -70,31 +72,26 @@ print("CREATING FASTAPI APP", file=sys.stderr, flush=True)
 app = FastAPI(title="IbtikarAI Backend", version="0.2.0")
 print("FASTAPI APP CREATED", file=sys.stderr, flush=True)
 
-# Add exception handler to debug 404s
-@app.exception_handler(404)
-async def not_found_handler(request, exc):
-    """Debug handler to see what routes are registered"""
-    import sys
-    routes_list = []
-    for route in app.routes:
-        if hasattr(route, 'path'):
-            methods = getattr(route, 'methods', set())
-            routes_list.append(f"{list(methods)} {route.path}")
-    
-    print(f"404 ERROR - Requested path: {request.url.path}", file=sys.stderr, flush=True)
-    print(f"Available routes: {routes_list}", file=sys.stderr, flush=True)
-    
-    # If it's one of our HTML pages, try to return it anyway
-    if request.url.path == "/privacy-policy.html":
-        return HTMLResponse(content="""<!DOCTYPE html>
+# Add middleware to catch HTML page requests BEFORE routing
+class HTMLPageMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        path = request.url.path
+        print(f"MIDDLEWARE: Request to {path}", file=sys.stderr, flush=True)
+        
+        # Serve HTML pages directly from middleware if routes fail
+        if path == "/privacy-policy.html":
+            print("MIDDLEWARE: Serving privacy-policy.html", file=sys.stderr, flush=True)
+            return HTMLResponse(content="""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Privacy Policy - Ibtikar</title></head>
 <body><h1>Privacy Policy for Ibtikar</h1><p>Last Updated: January 2025</p>
 <p>Ibtikar ("we," "our," or "us") operated by <strong>Ibtikar Development</strong> (Account ID: 8344367188917813700) is committed to protecting your privacy.</p>
 <p><strong>Email:</strong> support@ibtikar.app</p>
 <p><a href="delete-account.html">Request Account Deletion</a></p>
 </body></html>""")
-    if request.url.path == "/delete-account.html":
-        return HTMLResponse(content="""<!DOCTYPE html>
+        
+        if path == "/delete-account.html":
+            print("MIDDLEWARE: Serving delete-account.html", file=sys.stderr, flush=True)
+            return HTMLResponse(content="""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -115,11 +112,9 @@ async def not_found_handler(request, exc):
     <h1>Delete Your Ibtikar Account</h1>
     <p><strong>App Name:</strong> Ibtikar</p>
     <p><strong>Developer:</strong> Ibtikar Development</p>
-    
     <div class="warning">
         <strong>⚠️ Important:</strong> Deleting your account is <strong>permanent and irreversible</strong>. All your data will be permanently deleted.
     </div>
-
     <h2>How to Request Account Deletion</h2>
     <div class="steps">
         <p><strong>Follow these steps to delete your Ibtikar account:</strong></p>
@@ -133,7 +128,6 @@ async def not_found_handler(request, exc):
         </ol>
         <p><strong>Email Address:</strong> <a href="mailto:support@ibtikar.app?subject=Account%20Deletion%20Request">support@ibtikar.app</a></p>
     </div>
-
     <h2>Data That Will Be Deleted</h2>
     <div class="data-list">
         <p>When you delete your <strong>Ibtikar</strong> account, the following data will be <strong>permanently removed</strong>:</p>
@@ -145,7 +139,6 @@ async def not_found_handler(request, exc):
             <li><strong>App Data:</strong> Your activation status, preferences, settings, and error logs</li>
         </ul>
     </div>
-
     <h2>Data Retention Period</h2>
     <p><strong>Deletion Timeline:</strong></p>
     <ul>
@@ -154,30 +147,35 @@ async def not_found_handler(request, exc):
         <li><strong>No Retention:</strong> We do not retain any of your data after deletion</li>
         <li><strong>No Recovery:</strong> Once deleted, your data cannot be recovered or restored</li>
     </ul>
-
+    <p><strong>Additional Retention Period:</strong> None. All data is permanently deleted within 30 days of your deletion request.</p>
     <h2>Contact Information</h2>
     <div class="contact">
         <p><strong>App Name:</strong> Ibtikar</p>
         <p><strong>Developer:</strong> Ibtikar Development</p>
-        <p><strong>Email:</strong> support@ibtikar.app</p>
+        <p><strong>Email:</strong> <a href="mailto:support@ibtikar.app?subject=Account%20Deletion%20Request">support@ibtikar.app</a></p>
         <p><strong>Subject:</strong> Account Deletion Request</p>
         <p><strong>Response Time:</strong> We aim to respond within 48 hours and complete deletion within 7 business days.</p>
     </div>
-
     <p style="margin-top: 40px; text-align: center;">
         <a href="privacy-policy.html">View Privacy Policy</a> | 
         <a href="mailto:support@ibtikar.app?subject=Account%20Deletion%20Request">Contact Support</a>
     </p>
 </body>
 </html>""")
-    if request.url.path == "/":
-        return HTMLResponse(content="""<!DOCTYPE html>
+        
+        if path == "/":
+            print("MIDDLEWARE: Serving root", file=sys.stderr, flush=True)
+            return HTMLResponse(content="""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Ibtikar Backend API</title></head>
 <body><h1>Ibtikar Backend API</h1><p>Service is running.</p>
 <p><a href="/health">Health Check</a> | <a href="/privacy-policy.html">Privacy Policy</a> | <a href="/delete-account.html">Delete Account</a></p>
 </body></html>""")
-    
-    return {"detail": "Not Found", "requested_path": str(request.url.path), "available_routes": routes_list}
+        
+        # Let other requests pass through
+        response = await call_next(request)
+        return response
+
+app.add_middleware(HTMLPageMiddleware)
 
 # Define critical routes FIRST before any other setup
 # These routes MUST be defined early to ensure they're registered
