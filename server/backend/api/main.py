@@ -188,8 +188,6 @@ async def root():
     import sys
     print("ROOT ENDPOINT CALLED", file=sys.stderr, flush=True)
     return HTMLResponse(content="""
-    """Root endpoint"""
-    return HTMLResponse(content="""
     <!DOCTYPE html>
     <html>
     <head>
@@ -530,161 +528,6 @@ async def startup_event():
     logger.info("=" * 80)
 
 # Routes are already defined at the top of the file - no duplicates needed
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Privacy Policy - Ibtikar</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
-            color: #333;
-            background-color: #FAFAFA;
-        }
-        h1 {
-            color: #00A3A3;
-            border-bottom: 3px solid #F6DE55;
-            padding-bottom: 10px;
-        }
-        h2 {
-            color: #00A3A3;
-            margin-top: 30px;
-        }
-        h3 {
-            color: #333;
-            margin-top: 20px;
-        }
-        .last-updated {
-            color: #666;
-            font-style: italic;
-            margin-bottom: 30px;
-        }
-        .contact {
-            background-color: #FFFFFF;
-            padding: 20px;
-            border-radius: 8px;
-            border: 2px solid #00A3A3;
-            margin-top: 30px;
-        }
-        .highlight {
-            background-color: #FFF3CD;
-            padding: 15px;
-            border-left: 4px solid #F6DE55;
-            margin: 20px 0;
-        }
-        ul, ol {
-            margin: 10px 0;
-            padding-left: 25px;
-        }
-        li {
-            margin: 8px 0;
-        }
-        a {
-            color: #00A3A3;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
-<body>
-    <h1>Privacy Policy for Ibtikar</h1>
-    <p class="last-updated">Last Updated: January 2025</p>
-
-    <div class="highlight">
-        <p><strong>Effective Date:</strong> This Privacy Policy is effective as of January 2025 and applies to all users of the Ibtikar mobile application.</p>
-    </div>
-
-    <h2>1. Introduction</h2>
-    <p>Ibtikar ("we," "our," or "us") operated by <strong>Ibtikar Development</strong> (Account ID: 8344367188917813700) is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application Ibtikar (the "App").</p>
-    
-    <p>By using the App, you agree to the collection and use of information in accordance with this policy. If you do not agree with our policies and practices, please do not use the App.</p>
-
-    <h2>2. Information We Collect</h2>
-    
-    <h3>2.1 Account and Authentication Information</h3>
-    <p>When you connect your Twitter/X account through OAuth 2.0 authentication, we collect the following information:</p>
-    <ul>
-        <li><strong>Twitter/X User ID:</strong> A unique identifier assigned by Twitter/X to your account</li>
-        <li><strong>Username:</strong> Your Twitter/X username (handle)</li>
-        <li><strong>Display Name:</strong> Your public display name on Twitter/X</li>
-        <li><strong>Profile Image URL:</strong> The URL of your Twitter/X profile picture</li>
-        <li><strong>Email Address:</strong> Derived from your Twitter/X username for account identification</li>
-        <li><strong>OAuth Tokens:</strong> Access tokens and refresh tokens (encrypted using Fernet encryption) that allow us to access your Twitter/X data on your behalf</li>
-        <li><strong>OAuth Scopes:</strong> Information about the permissions you granted (tweet.read, users.read, follows.read, offline.access)</li>
-    </ul>
-
-    <h3>2.2 Content and Post Data</h3>
-    <p>To provide our AI-powered content analysis service, we collect and process the following data from your Twitter/X account:</p>
-    <ul>
-        <li><strong>Posts and Tweets:</strong> Text content of posts from accounts you follow in your Twitter/X feed</li>
-        <li><strong>Post Metadata:</strong> 
-            <ul>
-                <li>Post IDs (unique identifiers for each post)</li>
-                <li>Author IDs (Twitter/X user IDs of post authors)</li>
-                <li>Timestamps (when posts were created)</li>
-                <li>Language codes (detected language of posts)</li>
-                <li>Source information (platform identifier)</li>
-            </ul>
-        </li>
-        <li><strong>Following List:</strong> Information about accounts you follow to fetch their posts for analysis</li>
-    </ul>
-
-    <h3>2.3 AI Analysis Results</h3>
-    <p>When we analyze content using our AI models, we generate and store:</p>
-    <ul>
-        <li><strong>Classification Labels:</strong> Whether content is classified as "harmful", "safe", or "unknown"</li>
-        <li><strong>Confidence Scores:</strong> Numerical scores (0.0 to 1.0) indicating the AI's confidence in its classification</li>
-        <li><strong>Analysis Timestamps:</strong> When each analysis was performed</li>
-        <li><strong>Aggregate Statistics:</strong> Counts of harmful, safe, and unknown classifications per user</li>
-    </ul>
-
-    <h2>3. How We Use Your Information</h2>
-    <p>We use the collected information for the following purposes:</p>
-    
-    <h3>3.1 Core Service Provision</h3>
-    <ul>
-        <li><strong>Content Analysis:</strong> To analyze posts from your Twitter/X feed using AI models to identify potentially harmful content</li>
-        <li><strong>Safety Alerts:</strong> To provide you with real-time alerts about harmful content in your feed</li>
-        <li><strong>Account Authentication:</strong> To authenticate and maintain your connection to Twitter/X</li>
-        <li><strong>Feed Access:</strong> To fetch and display posts from accounts you follow on Twitter/X</li>
-    </ul>
-
-    <h2>4. Data Storage and Security</h2>
-    <p>We implement comprehensive security measures including encryption in transit (HTTPS/TLS) and encryption at rest for sensitive data like OAuth tokens.</p>
-
-    <h2>5. Data Retention and Deletion</h2>
-    <p>Data is retained while your account is active. When you delete your account, all data is permanently deleted immediately from active databases, and backup copies are deleted within 30 days. See our <a href="delete-account.html">Delete Account</a> page for details.</p>
-
-    <h2>6. Your Rights</h2>
-    <p>You have the right to access, delete, and control your data. You can delete your account at any time. For GDPR and CCPA rights, contact us at support@ibtikar.app.</p>
-
-    <h2>7. Contact Us</h2>
-    <div class="contact">
-        <p>If you have questions about this Privacy Policy, please contact us:</p>
-        <p><strong>Developer:</strong> Ibtikar Development</p>
-        <p><strong>Account ID:</strong> 8344367188917813700</p>
-        <p><strong>Email:</strong> support@ibtikar.app</p>
-        <p><strong>App Name:</strong> Ibtikar</p>
-    </div>
-
-    <p style="margin-top: 40px; text-align: center; color: #666;">
-        <a href="delete-account.html" style="color: #D90000; font-weight: bold;">Request Account Deletion</a> | 
-        <a href="/" style="color: #00A3A3;">Back to App</a>
-    </p>
-
-    <p style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
-        <small>This Privacy Policy is effective as of January 2025. Last Updated: January 2025.</small>
-    </p>
-</body>
-</html>""")
-
-# Duplicate route removed - already defined at top of file
 
 @app.get("/test")
 async def test_endpoint():
@@ -963,7 +806,7 @@ async def x_oauth_callback(
     print("≡ا¤ Exchanging code for token...")
 
     try:
-    token = await exchange_code_for_token(code, code_verifier)
+        token = await exchange_code_for_token(code, code_verifier)
         print("ظ£à Token exchange successful")
     except Exception as e:
         print(f"ظإî Token exchange failed: {e}")
